@@ -1,0 +1,28 @@
+# ── Android ───────────────────────────────────────────────────
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+
+# ── Secrets (never commit) ────────────────────────────────────
+keystore.properties
+*.keystore
+*.jks
+
+# ── OS ────────────────────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+*.log
+
+# ── Build artifacts ───────────────────────────────────────────
+/app/build
+*.dex
+*.class

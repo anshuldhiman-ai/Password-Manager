@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PswdMngr" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0B0E1A</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.PswdMngr.Main</item>
+    </style>
+
+    <style name="Theme.PswdMngr.Main" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0E1A</item>
+        <item name="android:statusBarColor">#0B0E1A</item>
+        <item name="android:navigationBarColor">#0B0E1A</item>
+    </style>
+</resources>

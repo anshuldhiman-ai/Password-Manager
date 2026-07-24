@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shield with keyhole, violet-to-cyan gradient -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.5" android:scaleY="0.5" android:pivotX="54" android:pivotY="54">
+        <path
+            android:pathData="M54,14 L88,28 L88,54 C88,76 74,90 54,96 C34,90 20,76 20,54 L20,28 Z">
+            <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+                <gradient
+                    android:startX="20" android:startY="14"
+                    android:endX="88" android:endY="96"
+                    android:type="linear">
+                    <item android:offset="0" android:color="#FF7C5CFF" />
+                    <item android:offset="1" android:color="#FF4DD0E1" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#FF0B0E1A"
+            android:pathData="M54,40 C58.4,40 62,43.6 62,48 C62,51 60.3,53.6 57.8,55 L60,70 L48,70 L50.2,55 C47.7,53.6 46,51 46,48 C46,43.6 49.6,40 54,40 Z" />
+    </group>
+</vector>
