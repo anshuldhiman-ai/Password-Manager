@@ -57,6 +57,7 @@ fun SettingsScreen(nav: NavController) {
     var backupPassword2 by remember { mutableStateOf("") }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var selectedCategories by remember { mutableStateOf(setOf("entries", "cards", "banks", "documents", "notes", "tasks")) }
+    var pendingSelectiveExport by remember { mutableStateOf(false) }
 
     val bioSupported = remember {
         BiometricManager.from(ctx)
@@ -80,7 +81,17 @@ fun SettingsScreen(nav: NavController) {
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri -> uri?.let { pendingUri = it; backupDialog = "export" } }
+    ) { uri ->
+        uri?.let {
+            pendingUri = it
+            if (pendingSelectiveExport) {
+                pendingSelectiveExport = false
+                backupDialog = "selective"
+            } else {
+                backupDialog = "export"
+            }
+        }
+    }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -332,7 +343,7 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
             item {
-                GlassCard(onClick = { backupDialog = "selective"; exportLauncher.launch("pswd-vault-backup-partial.pmv") }) {
+                GlassCard(onClick = { pendingSelectiveExport = true; exportLauncher.launch("pswd-vault-backup-partial.pmv") }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconBadge(Icons.Rounded.FilterList, Cyan)
                         Spacer(Modifier.width(14.dp))

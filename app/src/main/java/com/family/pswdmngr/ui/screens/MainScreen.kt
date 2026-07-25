@@ -45,17 +45,17 @@ import kotlinx.coroutines.launch
 private data class NavTab(val label: String, val icon: ImageVector, val activeIcon: ImageVector)
 
 private val TABS = listOf(
-    NavTab("Vault", Icons.Rounded.Home, Icons.Rounded.Home),
+    NavTab("Home", Icons.Rounded.Home, Icons.Rounded.Home),
+    NavTab("Search", Icons.Rounded.Search, Icons.Rounded.Search),
     NavTab("Cards", Icons.Rounded.CreditCard, Icons.Rounded.CreditCard),
     NavTab("Notes", Icons.Rounded.StickyNote2, Icons.Rounded.StickyNote2),
-    NavTab("Search", Icons.Rounded.Search, Icons.Rounded.Search),
     NavTab("More", Icons.Rounded.MoreHoriz, Icons.Rounded.MoreHoriz),
 )
 
 private const val TAB_VAULT = 0
-private const val TAB_CARDS = 1
-private const val TAB_NOTES = 2
-private const val TAB_SEARCH = 3
+private const val TAB_SEARCH = 1
+private const val TAB_CARDS = 2
+private const val TAB_NOTES = 3
 private const val TAB_MORE = 4
 
 // ── Main screen with bottom nav ─────────────────────────────────────────
@@ -149,10 +149,10 @@ fun MainScreen(nav: NavController) {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             when (selectedTab) {
-                TAB_VAULT -> VaultDashboard(nav, snackbar, onShowMore = { selectedTab = TAB_MORE })
+                TAB_VAULT -> VaultDashboard(nav, snackbar, onShowMore = { selectedTab = TAB_MORE }, onSettings = { nav.navigate("settings") })
+                TAB_SEARCH -> UnifiedSearchTab(nav, snackbar)
                 TAB_CARDS -> CardsHub(nav, snackbar)
                 TAB_NOTES -> NotesHub(nav, snackbar)
-                TAB_SEARCH -> UnifiedSearchTab(nav, snackbar)
                 TAB_MORE -> MoreTab(nav, snackbar)
             }
         }
@@ -325,7 +325,7 @@ private fun greeting(): String {
 }
 
 @Composable
-private fun VaultDashboard(nav: NavController, snackbar: SnackbarHostState, onShowMore: () -> Unit = {}) {
+private fun VaultDashboard(nav: NavController, snackbar: SnackbarHostState, onShowMore: () -> Unit = {}, onSettings: () -> Unit = {}) {
     val ctx = LocalContext.current
     val entries by VaultSession.dao().observeAll().collectAsState(initial = emptyList())
     val cards by VaultSession.cardDao().observeAll().collectAsState(initial = emptyList())
@@ -360,8 +360,11 @@ private fun VaultDashboard(nav: NavController, snackbar: SnackbarHostState, onSh
                 IconButton(onClick = { nav.navigate("generator") }) {
                     Icon(Icons.Rounded.AutoAwesome, "Password generator", tint = Cyan)
                 }
-                IconButton(onClick = onShowMore) {
-                    Icon(Icons.Rounded.MoreHoriz, "More options", tint = TextSecondary)
+                IconButton(onClick = { nav.navigate("settings") }) {
+                    Icon(Icons.Rounded.Settings, "Settings", tint = TextSecondary)
+                }
+                IconButton(onClick = onSettings) {
+                    Icon(Icons.Rounded.Settings, "Settings", tint = TextSecondary)
                 }
             }
         }
@@ -668,7 +671,40 @@ private fun NotesHub(nav: NavController, snackbar: SnackbarHostState) {
     }
 }
 
-// ── Tab 4: Unified Search ───────────────────────────────────────────────
+// ── Tab 4: Tasks Hub ────────────────────────────────────────────────────
+
+@Composable
+private fun TasksHub(nav: NavController, snackbar: SnackbarHostState) {
+    val pendingTasks by VaultSession.taskDao().observeStarred().collectAsState(initial = emptyList())
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(22.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            Text("Tasks", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+            Spacer(Modifier.height(16.dp))
+        }
+        item {
+            GlassCard(onClick = { nav.navigate("tasks") }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconBadge(Icons.Rounded.TaskAlt, Violet)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("All tasks", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                        Text("${pendingTasks.size} starred", color = TextSecondary,
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, tint = TextSecondary)
+                }
+            }
+        }
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+// ── Unified Search (integrated into Home dashboard) ─────────────────────
 
 @Composable
 private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {

@@ -74,14 +74,14 @@ fun UnlockScreen(nav: NavController) {
     val keystore = remember { KeystoreWrapper(ctx) }
     val graceActive = remember { VaultSession.bioGraceActive(ctx) }
 
-    // Disable biometric if rooted (attacker could bypass phone's lock screen)
+    // Biometric available whenever the user has enabled it, regardless of grace window.
+    // If rooted, biometric is disabled entirely as a security measure.
     val bioAvailable by remember {
         mutableStateOf(
-            !isRooted && keystore.isEnabled && graceActive && BiometricManager.from(ctx)
+            !isRooted && keystore.isEnabled && BiometricManager.from(ctx)
                 .canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
         )
     }
-    val graceExpired = remember { keystore.isEnabled && !graceActive }
 
     // --- Lockout (exponential backoff, persistent across screen restarts) ---
     var failCount by remember { mutableStateOf(LockoutTracker.failCount(ctx)) }
@@ -237,28 +237,10 @@ fun UnlockScreen(nav: NavController) {
                 when {
                     isRooted -> "Rooted device — enter your master password"
                     bioAvailable -> "Use fingerprint, face or your master password"
-                    graceExpired -> "Quick unlock has expired for your safety.\nEnter your master password."
                     else -> "Enter your master password"
                 },
                 color = TextSecondary, textAlign = TextAlign.Center,
             )
-            if (graceExpired) {
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    Modifier
-                        .clip(CircleShape)
-                        .background(Amber.copy(alpha = 0.12f))
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.LockClock, null, tint = Amber, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Password required after ${graceLabel(VaultSession.bioGraceMinutes(ctx))}",
-                        color = Amber, style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
             if (failCount > 0 && lockoutMs == 0L) {
                 Spacer(Modifier.height(6.dp))
                 Text(

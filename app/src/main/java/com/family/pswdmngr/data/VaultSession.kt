@@ -457,18 +457,18 @@ object VaultSession {
     // ── DB lifecycle ─────────────────────────────────────────────────────
 
     private fun openDb(ctx: Context, key: ByteArray) {
-        val secureKey = SecureData(key.size).also { _ ->
-            // Copy raw key bytes into the secure buffer using a temporary copy
-            val tmp = SecureData(key.size).also { s -> s.withBytes { key.copyInto(it) } }
-            VaultCrypto.wipe(key)
-            // Pass a copy to SQLCipher (it takes ownership of its own copy)
-            val factory = SupportFactory(tmp.copyOf(), null, false)
-            db = Room.databaseBuilder(ctx.applicationContext, VaultDatabase::class.java, "vault.db")
-                .openHelperFactory(factory)
-                .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4)
-                .build()
-            vaultKey = tmp
-        }
+        // Wrap the key in SecureData (writes into direct ByteBuffer via writeFrom)
+        val secureKey = SecureData(key.size)
+        secureKey.writeFrom(key)
+        VaultCrypto.wipe(key)
+
+        // Pass a copy to SQLCipher (it takes ownership of its own copy)
+        val factory = SupportFactory(secureKey.copyOf(), null, false)
+        db = Room.databaseBuilder(ctx.applicationContext, VaultDatabase::class.java, "vault.db")
+            .openHelperFactory(factory)
+            .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4)
+            .build()
+        vaultKey = secureKey
     }
 
     fun lock() {
