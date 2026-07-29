@@ -80,7 +80,11 @@ object VaultSession {
      * this guarantees the keys and values are AES-256 encrypted at rest
      * so a file-system-level read of the XML reveals nothing at all.
      */
+    @Volatile private var cachedPrefs: SharedPreferences? = null
+
     private fun prefs(ctx: Context): SharedPreferences {
+        val existing = cachedPrefs
+        if (existing != null) return existing
         val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         return EncryptedSharedPreferences.create(
             META_PREFS,
@@ -88,7 +92,7 @@ object VaultSession {
             ctx.applicationContext,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        ).also { cachedPrefs = it }
     }
 
     private fun edit(ctx: Context): SharedPreferences.Editor =

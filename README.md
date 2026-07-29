@@ -33,7 +33,7 @@
 ```
 Master Password / Recovery Key
         ↓
-    Argon2id KDF  ← 48 MiB memory, 3 iterations, 2 lanes (~400-600ms on mid-range)
+    Argon2id KDF  ← 32 MiB memory, 3 iterations, 2 lanes (~400-600ms on mid-range)
         ↓
     256-bit Vault Master Key (random, dual-wrapped)
         ↓
@@ -54,7 +54,7 @@ Master Password / Recovery Key
 | Feature | Detail |
 |---------|--------|
 | **No Internet** | `INTERNET` permission deliberately omitted — data never leaves the device |
-| **Auto-Lock** | Vault locks 30s after app goes to background; master key zeroed with libsodium |
+| **Auto-Lock** | Vault locks 30s after app goes to background; master key zeroed via SecureData.wipe() |
 | **Clipboard Guard** | Copied secrets auto-clear after 30s; marked as `IS_SENSITIVE` to hide from clipboard preview |
 | **Anti-Screenshot** | `FLAG_SECURE` blocks screenshots and screen recording |
 | **Biometric Grace** | Fingerprint/face re-unlock within configurable window (15 min — 12 hours); past window → master password required |
@@ -118,12 +118,12 @@ Every vault has a **Recovery Key** — a 24-character base32 key (no ambiguous 0
 │     openDb() / lock() / currentKey() / changePassword │
 ├─────────────────────────────────────────────────────┤
 │           Room Database (SQLCipher v4)                │
-│  9 DAOs: VaultDao, CardDao, BankDao, DocDao,         │
+│  8 DAOs: VaultDao, CardDao, BankDao, DocDao,         │
 │          AttachmentDao, NoteDao, TaskDao, TrashDao    │
 │  Migrations: 1→2, 2→3, 3→4                           │
 ├─────────────────────────────────────────────────────┤
 │              Crypto Layer                              │
-│  Argon2id KDF │ AES-256-GCM │ libsodium secure memory│
+│  Argon2id KDF │ AES-256-GCM │ ByteBuffer.allocateDirect secure memory│
 │  KeystoreWrapper (biometric) │ TOTP │ PasswordGenerator│
 ├─────────────────────────────────────────────────────┤
 │           SQLCipher Encrypted Storage                  │
@@ -168,7 +168,7 @@ app/src/main/java/com/family/pswdmngr/
 │   ├── PasswordGenerator.kt     # Strong password + passphrase generator
 │   ├── RecoveryKeyGenerator.kt  # 24-char base32 recovery key generation
 │   ├── RootDetector.kt          # Root/jailbreak detection (su, Magisk, etc.)
-│   ├── SecureMemory.kt          # libsodium mlock/memzero wrapper
+│   ├── SecureMemory.kt          # ByteBuffer.allocateDirect native memory (guaranteed zeroing)
 │   ├── Totp.kt                  # TOTP 2FA (RFC 6238)
 │   └── VaultCrypto.kt           # Argon2id KDF + AES-256-GCM + wipe utilities
 ├── data/

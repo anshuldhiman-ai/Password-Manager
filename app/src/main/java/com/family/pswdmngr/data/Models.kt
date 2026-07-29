@@ -1,4 +1,4 @@
-package com.family.pswdmngr.data
+﻿package com.family.pswdmngr.data
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
@@ -365,3 +365,126 @@ interface TaskDao {
     @Query("SELECT COUNT(*) FROM tasks WHERE listId = :listId AND completed = 0")
     fun observePendingCount(listId: Long): Flow<Int>
 }
+
+/* â”€â”€ JSON serialization for trash/restore (shared between RecycleBinManager and BackupManager) â”€â”€ */
+
+fun VaultEntry.toTrashJson(): String = JSONObject().apply {
+    put("title", title); put("category", category.name)
+    put("username", username); put("password", password)
+    put("url", url); put("notes", notes); put("totp", totpSecret)
+    put("favorite", favorite); put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun vaultEntryFromJson(json: String): VaultEntry {
+    val o = JSONObject(json)
+    return VaultEntry(
+        title = o.getString("title"), category = EntryCategory.valueOf(o.optString("category", "LOGIN")),
+        username = o.optString("username"), password = o.optString("password"),
+        url = o.optString("url"), notes = o.optString("notes"),
+        totpSecret = o.optString("totp"), favorite = o.optBoolean("favorite"),
+        createdAt = o.optLong("createdAt"), updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun CardEntry.toTrashJson(): String = JSONObject().apply {
+    put("label", label); put("bankName", bankName); put("cardType", cardType)
+    put("network", network); put("productId", productId)
+    put("number", number); put("holder", holder); put("expiry", expiry)
+    put("cvv", cvv); put("pin", pin); put("serialNo", serialNo)
+    put("fieldsJson", fieldsJson); put("favorite", favorite)
+    put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun cardEntryFromJson(json: String): CardEntry {
+    val o = JSONObject(json)
+    return CardEntry(
+        label = o.optString("label"), bankName = o.optString("bankName"),
+        cardType = o.optString("cardType", CardType.DEBIT),
+        network = o.optString("network", "AUTO"), productId = o.optString("productId"),
+        number = o.optString("number"), holder = o.optString("holder"),
+        expiry = o.optString("expiry"), cvv = o.optString("cvv"), pin = o.optString("pin"),
+        serialNo = o.optString("serialNo"), fieldsJson = o.optString("fieldsJson", "[]"),
+        favorite = o.optBoolean("favorite"), createdAt = o.optLong("createdAt"),
+        updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun BankEntry.toTrashJson(): String = JSONObject().apply {
+    put("bankName", bankName); put("accountHolder", accountHolder)
+    put("accountNumber", accountNumber); put("accountType", accountType)
+    put("ifsc", ifsc); put("branch", branch); put("micr", micr)
+    put("cif", cif); put("customerId", customerId)
+    put("nbUser", netbankingUserId); put("nbPass", netbankingPassword)
+    put("profilePass", profilePassword); put("txnPass", transactionPassword)
+    put("upiPin", upiPin); put("mobile", registeredMobile)
+    put("fieldsJson", fieldsJson); put("favorite", favorite)
+    put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun bankEntryFromJson(json: String): BankEntry {
+    val o = JSONObject(json)
+    return BankEntry(
+        bankName = o.optString("bankName"), accountHolder = o.optString("accountHolder"),
+        accountNumber = o.optString("accountNumber"),
+        accountType = o.optString("accountType", "SAVINGS"),
+        ifsc = o.optString("ifsc"), branch = o.optString("branch"),
+        micr = o.optString("micr"), cif = o.optString("cif"),
+        customerId = o.optString("customerId"), netbankingUserId = o.optString("nbUser"),
+        netbankingPassword = o.optString("nbPass"), profilePassword = o.optString("profilePass"),
+        transactionPassword = o.optString("txnPass"), upiPin = o.optString("upiPin"),
+        registeredMobile = o.optString("mobile"), fieldsJson = o.optString("fieldsJson", "[]"),
+        favorite = o.optBoolean("favorite"), createdAt = o.optLong("createdAt"),
+        updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun DocumentEntry.toTrashJson(): String = JSONObject().apply {
+    put("title", title); put("docType", docType); put("number", number)
+    put("holder", holder); put("notes", notes); put("fieldsJson", fieldsJson)
+    put("favorite", favorite); put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun documentEntryFromJson(json: String): DocumentEntry {
+    val o = JSONObject(json)
+    return DocumentEntry(
+        title = o.optString("title"), docType = o.optString("docType", "OTHER"),
+        number = o.optString("number"), holder = o.optString("holder"),
+        notes = o.optString("notes"), fieldsJson = o.optString("fieldsJson", "[]"),
+        favorite = o.optBoolean("favorite"), createdAt = o.optLong("createdAt"),
+        updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun NoteEntry.toTrashJson(): String = JSONObject().apply {
+    put("title", title); put("body", body); put("colorIdx", colorIdx)
+    put("pinned", pinned); put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun noteEntryFromJson(json: String): NoteEntry {
+    val o = JSONObject(json)
+    return NoteEntry(
+        title = o.optString("title"), body = o.optString("body"),
+        colorIdx = o.optInt("colorIdx"), pinned = o.optBoolean("pinned"),
+        createdAt = o.optLong("createdAt"), updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun TaskItem.toTrashJson(): String = JSONObject().apply {
+    put("listId", listId); put("parentId", parentId); put("title", title)
+    put("details", details); put("dueAt", dueAt); put("starred", starred)
+    put("completed", completed); put("completedAt", completedAt)
+    put("position", position); put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun taskItemFromJson(json: String): TaskItem {
+    val o = JSONObject(json)
+    return TaskItem(
+        listId = o.optLong("listId"), parentId = o.optLong("parentId"),
+        title = o.optString("title"), details = o.optString("details"),
+        dueAt = o.optLong("dueAt"), starred = o.optBoolean("starred"),
+        completed = o.optBoolean("completed"), completedAt = o.optLong("completedAt"),
+        position = o.optInt("position"), createdAt = o.optLong("createdAt"),
+        updatedAt = o.optLong("updatedAt"),
+    )
+}
+

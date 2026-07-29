@@ -30,7 +30,11 @@ object LockoutTracker {
     private const val BASE_LOCKOUT_MS = 30_000L    // 30 seconds at fail 3
     private const val MAX_LOCKOUT_MS = 480_000L    // 8 minutes cap
 
+    @Volatile private var cachedPrefs: SharedPreferences? = null
+
     private fun prefs(ctx: Context): SharedPreferences {
+        val existing = cachedPrefs
+        if (existing != null) return existing
         val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         return EncryptedSharedPreferences.create(
             PREFS_NAME,
@@ -38,7 +42,7 @@ object LockoutTracker {
             ctx.applicationContext,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        ).also { cachedPrefs = it }
     }
 
     /** Number of consecutive failed unlock attempts. */
