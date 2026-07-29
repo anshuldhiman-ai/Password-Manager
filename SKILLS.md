@@ -12,7 +12,7 @@ This document catalogs the technologies, libraries, and skills demonstrated in t
 | **Jetpack Compose** | 100% declarative UI — no XML layouts beyond splash screen |
 | **Material3 Design** | Modern Material You components: DatePicker, TimePicker, Bottom Sheets, Navigation |
 | **Navigation Compose** | Type-safe navigation with argument passing and SavedStateHandle |
-| **Room Database** | 6 entities, 7 DAOs, type converters, schema migrations |
+| **Room Database** | 9 entities, 8 DAOs, type converters, schema migrations |
 | **CameraX** | Camera preview, image analysis for ML Kit OCR |
 | **Lifecycle Management** | ProcessLifecycleObserver, auto-lock, StateFlow integration |
 

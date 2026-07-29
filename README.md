@@ -45,7 +45,7 @@ Master Password / Recovery Key
 | **Key Derivation** | Argon2id (libsodium via argon2kt) — 48 MiB (`ARGON_M_KIB=49152`), 3 iterations, 2 lanes, ~400-600ms on mid-range |
 | **Vault Encryption** | SQLCipher — AES-256-CBC with per-page IV + HMAC integrity |
 | **Key Storage** | Dual-wrap: password-derived key + recovery-derived key independently wrap vault master key |
-| **Secure Memory** | libsodium `sodium_mlock` / `sodium_memzero` / `sodium_munlock` — prevents swap exposure, guarantees zeroing |
+| **Secure Memory** | `java.nio.ByteBuffer.allocateDirect()` — native heap allocation, guaranteed explicit zeroing, no JNI overhead |
 | **Biometric Key** | Android Keystore — non-extractable hardware-backed key, invalidated on fingerprint enrollment change |
 | **At-Rest Metadata** | All SharedPreferences stores (vault meta, lockout, biometric wrap) use `EncryptedSharedPreferences` — AES-256 encrypted XML backed by Android Keystore |
 
@@ -142,8 +142,9 @@ Every vault has a **Recovery Key** — a 24-character base32 key (no ambiguous 0
 | **Navigation** | Navigation Compose 2.7.7 |
 | **Database** | Room 2.6.1 + SQLCipher 4.5.4 |
 | **KDF** | Argon2id (argon2kt 1.5.0, libsodium) |
-| **Secure Memory** | Lazysodium Android 5.2.1 (libsodium JNI) |
+| **Secure Memory** | `java.nio.ByteBuffer.allocateDirect()` native memory (guaranteed zeroing, no JNI) |
 | **Biometrics** | AndroidX Biometric 1.1.0 |
+| **Encrypted Prefs** | AndroidX Security-Crypto 1.0.0 |
 | **Camera** | CameraX 1.3.1 (core, camera2, lifecycle, view) |
 | **OCR** | ML Kit Text Recognition 16.0.0 |
 | **QR Scanner** | Quickie 1.9.0 (TOTP setup) |
