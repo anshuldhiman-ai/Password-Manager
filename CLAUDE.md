@@ -28,7 +28,7 @@ Even though the blob values stored inside are already cryptographically opaque, 
 ### Code Conventions
 - **No Strings for secrets** — passwords/keys are `ByteArray` or `CharArray`, never `String`
 - **Wipe after use** — always call `VaultCrypto.wipe()` on key material when done
-- **SecureData** — wraps ByteArray with libsodium `sodium_mlock` + `sodium_memzero`
+- **SecureData** — wraps ByteArray with `java.nio.ByteBuffer.allocateDirect()` native memory (guaranteed zeroing, no JNI)
 - **AAD tags** — dual-wrap uses AAD: `"pw".toByteArray()` for password wrap, `"rec".toByteArray()` for recovery wrap
 - **Export format** — backup files use magic `PSWDMGR1` header + version byte + salt + AES-GCM blob
 - **IS_SENSITIVE** — clipboard entries marked `android.content.extra.IS_SENSITIVE=true` (API 24+) to hide from clipboard preview
@@ -109,7 +109,7 @@ When a legacy v1 vault is upgraded, `migrateToV2()` in VaultSession:
 Set in `VaultCrypto.kt`. Tune per-device by adjusting `ARGON_M_KIB`:
 | Constant | Value | Notes |
 |----------|-------|-------|
-| `ARGON_M_KIB` | 49152 | 48 MiB memory |
+| `ARGON_M_KIB` | 32768 | 32 MiB memory |
 | `ARGON_T` | 3 | 3 iterations |
 | `ARGON_P` | 2 | 2 lanes (parallelism) |
 | `KEY_LEN` | 32 | 256-bit output |
@@ -119,10 +119,10 @@ Set in `VaultCrypto.kt`. Tune per-device by adjusting `ARGON_M_KIB`:
 ```kotlin
 // Core security
 argon2kt:1.5.0              // Argon2id KDF (libsodium)
-lazysodium-android:5.2.1    // libsodium secure memory (mlock/memzero/munlock)
+// Secure memory via java.nio.ByteBuffer.allocateDirect() — native memory, no JNI dependency
 android-database-sqlcipher:4.5.4 // Encrypted SQLite
 biometric:1.1.0             // Fingerprint/face auth
-security-crypto:1.1.0-alpha06 // EncryptedSharedPreferences (AES-256 at rest)
+security-crypto:1.0.0             // EncryptedSharedPreferences (AES-256 at rest)
 
 // QR & export
 zxing-core:3.5.3            // Recovery key QR generation
@@ -149,7 +149,7 @@ Both `keystore.properties` and `*.keystore` are in `.gitignore`.
 ### Notable Implementation Details
 - **AAD on wrapped blobs**: Password-wrapped blob uses `aad="pw".toByteArray()`, recovery-wrapped uses `aad="rec".toByteArray()`. Any code that decrypts these must pass the matching AAD tag.
 - **`currentKey()` vs `copyOf()`**: `VaultSession.currentKey()` returns a `ByteArray` copy (copyOf) of the SecureData. The caller **must** wipe this copy when done.
-- **`openDb()` flow**: Receives raw key → copies into `SecureData` with sodium_mlock → wipes the raw key → creates SQLCipher `SupportFactory` with another copy.
+- **`openDb()` flow**: Receives raw key → copies into `SecureData` (native `ByteBuffer.allocateDirect`) → wipes the raw key → creates SQLCipher `SupportFactory` with another copy.
 - **Backup password**: Exports use their own Argon2id salt + derivation. The backup password is completely independent of the vault master password.
 
 ### To Ship

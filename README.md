@@ -42,7 +42,7 @@ Master Password / Recovery Key
 
 | Layer | Technology |
 |-------|-----------|
-| **Key Derivation** | Argon2id (libsodium via argon2kt) — 48 MiB (`ARGON_M_KIB=49152`), 3 iterations, 2 lanes, ~400-600ms on mid-range |
+| **Key Derivation** | Argon2id (libsodium via argon2kt) — 32 MiB (`ARGON_M_KIB=32768`), 3 iterations, 2 lanes, ~400-600ms on mid-range |
 | **Vault Encryption** | SQLCipher — AES-256-CBC with per-page IV + HMAC integrity |
 | **Key Storage** | Dual-wrap: password-derived key + recovery-derived key independently wrap vault master key |
 | **Secure Memory** | `java.nio.ByteBuffer.allocateDirect()` — native heap allocation, guaranteed explicit zeroing, no JNI overhead |

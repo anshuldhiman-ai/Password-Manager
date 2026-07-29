@@ -11,7 +11,7 @@
 
 | Step | Action | Expected Result | Result |
 |------|--------|----------------|--------|
-| 1.1 | Open the benchmark screen | Parameters display: `ARGON_M_KIB=49152`, `ARGON_T=3`, `ARGON_P=2` | ☐ |
+| 1.1 | Open the benchmark screen | Parameters display: `ARGON_M_KIB=32768`, `ARGON_T=3`, `ARGON_P=2` | ☐ |
 | 1.2 | Tap "Run benchmark" | Wait ~0.5-1s, result appears in ms | ☐ |
 | 1.3 | Record the result | `_____ ms` | ☐ |
 | 1.4 | Repeat 3 times, record each | Run 1: `_____` Run 2: `_____` Run 3: `_____` Average: `_____` | ☐ |
