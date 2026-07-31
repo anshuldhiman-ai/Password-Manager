@@ -1,5 +1,7 @@
 package com.family.pswdmngr.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -14,6 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.family.pswdmngr.VaultApp
+import com.family.pswdmngr.crypto.PasswordGenerator
 import com.family.pswdmngr.crypto.Totp
 import com.family.pswdmngr.data.VaultEntry
 import com.family.pswdmngr.data.VaultSession
@@ -42,7 +45,7 @@ fun EntryScreen(nav: NavController, id: Long) {
         // brief DB load — show the themed shell instead of a blank flash
         Scaffold(containerColor = Midnight) { pad ->
             Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Violet)
+                CircularProgressIndicator(color = Cyan)
             }
         }
         return
@@ -96,6 +99,7 @@ fun EntryScreen(nav: NavController, id: Long) {
             }
 
             if (e.password.isNotBlank()) item {
+                val entropy = PasswordGenerator.entropy(e.password)
                 FieldCard(
                     "PASSWORD",
                     if (showPassword) e.password else "•".repeat(e.password.length.coerceAtMost(14)),
@@ -107,6 +111,18 @@ fun EntryScreen(nav: NavController, id: Long) {
                     app.copySecret("password", e.password)
                     scope.launch { snackbar.showSnackbar("Password copied — clears in 30s") }
                 }
+                if (entropy >= 60) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Strong", color = Mint, style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(start = 4.dp))
+                }
+            }
+
+            if (e.url.isNotBlank()) item {
+                FieldCard("WEBSITE", e.url, Icons.Rounded.Language) {
+                    val uri = if (e.url.startsWith("http")) e.url else "https://${e.url}"
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+                }
             }
 
             if (e.totpSecret.isNotBlank()) item {
@@ -117,12 +133,13 @@ fun EntryScreen(nav: NavController, id: Long) {
             }
 
             if (e.notes.isNotBlank()) item {
-                GlassCard {
+                SurfaceCard {
                     SectionLabel("NOTES")
                     Spacer(Modifier.height(6.dp))
                     Text(e.notes, color = TextPrimary, style = MaterialTheme.typography.bodyLarge)
                 }
             }
+            item { Spacer(Modifier.height(8.dp)) }
         }
     }
 
@@ -157,7 +174,7 @@ private fun FieldCard(
     onExtra: (() -> Unit)? = null,
     onCopy: () -> Unit,
 ) {
-    GlassCard {
+    SurfaceCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Cyan, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
@@ -177,7 +194,7 @@ private fun FieldCard(
                 }
             }
             IconButton(onClick = onCopy) {
-                Icon(Icons.Rounded.ContentCopy, "Copy", tint = Violet)
+                Icon(Icons.Rounded.ContentCopy, "Copy", tint = Cyan)
             }
         }
     }
@@ -197,7 +214,7 @@ private fun TotpCard(secret: String, onCopy: (String) -> Unit) {
         }
     }
 
-    GlassCard {
+    SurfaceCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val c = code
             if (c == null) {
@@ -227,7 +244,7 @@ private fun TotpCard(secret: String, onCopy: (String) -> Unit) {
                 )
             }
             IconButton(onClick = { onCopy(c) }) {
-                Icon(Icons.Rounded.ContentCopy, "Copy", tint = Violet)
+                Icon(Icons.Rounded.ContentCopy, "Copy", tint = Cyan)
             }
         }
     }

@@ -45,17 +45,17 @@ import kotlinx.coroutines.launch
 private data class NavTab(val label: String, val icon: ImageVector, val activeIcon: ImageVector)
 
 private val TABS = listOf(
-    NavTab("Home", Icons.Rounded.Home, Icons.Rounded.Home),
-    NavTab("Search", Icons.Rounded.Search, Icons.Rounded.Search),
+    NavTab("Vault", Icons.Rounded.Shield, Icons.Rounded.Shield),
     NavTab("Cards", Icons.Rounded.CreditCard, Icons.Rounded.CreditCard),
     NavTab("Notes", Icons.Rounded.StickyNote2, Icons.Rounded.StickyNote2),
+    NavTab("Search", Icons.Rounded.Search, Icons.Rounded.Search),
     NavTab("More", Icons.Rounded.MoreHoriz, Icons.Rounded.MoreHoriz),
 )
 
 private const val TAB_VAULT = 0
-private const val TAB_SEARCH = 1
-private const val TAB_CARDS = 2
-private const val TAB_NOTES = 3
+private const val TAB_CARDS = 1
+private const val TAB_NOTES = 2
+private const val TAB_SEARCH = 3
 private const val TAB_MORE = 4
 
 // ── Main screen with bottom nav ─────────────────────────────────────────
@@ -122,11 +122,11 @@ fun MainScreen(nav: NavController) {
                                 fontWeight = if (selectedTab == i) FontWeight.SemiBold else FontWeight.Normal)
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Violet,
-                            selectedTextColor = TextPrimary,
+                            selectedIconColor = Cyan,
+                            selectedTextColor = Cyan,
                             unselectedIconColor = TextSecondary,
                             unselectedTextColor = TextSecondary,
-                            indicatorColor = Violet.copy(alpha = 0.12f),
+                            indicatorColor = Cyan.copy(alpha = 0.12f),
                         ),
                         alwaysShowLabel = true,
                     )
@@ -139,7 +139,7 @@ fun MainScreen(nav: NavController) {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     showAddSheet = true
                 },
-                containerColor = Violet,
+                containerColor = Cyan,
                 shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(8.dp),
             ) {
@@ -149,10 +149,15 @@ fun MainScreen(nav: NavController) {
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             when (selectedTab) {
-                TAB_VAULT -> VaultDashboard(nav, snackbar, onShowMore = { selectedTab = TAB_MORE }, onSettings = { nav.navigate("settings") })
-                TAB_SEARCH -> UnifiedSearchTab(nav, snackbar)
+                TAB_VAULT -> VaultDashboard(
+                    nav, snackbar,
+                    onShowMore = { selectedTab = TAB_MORE },
+                    onSettings = { nav.navigate("settings") },
+                    onSearch = { selectedTab = TAB_SEARCH },
+                )
                 TAB_CARDS -> CardsHub(nav, snackbar)
                 TAB_NOTES -> NotesHub(nav, snackbar)
+                TAB_SEARCH -> UnifiedSearchTab(nav, snackbar)
                 TAB_MORE -> MoreTab(nav, snackbar)
             }
         }
@@ -318,183 +323,181 @@ private data class AddItem(val label: String, val icon: ImageVector, val color: 
 
 // ── Tab 1: Vault Dashboard ──────────────────────────────────────────────
 
-/** Time-of-day greeting. */
-private fun greeting(): String {
-    val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    return when (h) { in 5..11 -> "Good morning"; in 12..16 -> "Good afternoon"; in 17..20 -> "Good evening"; else -> "Good night" }
-}
-
 @Composable
-private fun VaultDashboard(nav: NavController, snackbar: SnackbarHostState, onShowMore: () -> Unit = {}, onSettings: () -> Unit = {}) {
-    val ctx = LocalContext.current
+private fun VaultDashboard(
+    nav: NavController,
+    snackbar: SnackbarHostState,
+    onShowMore: () -> Unit = {},
+    onSettings: () -> Unit = {},
+    onSearch: () -> Unit = {},
+) {
     val entries by VaultSession.dao().observeAll().collectAsState(initial = emptyList())
     val cards by VaultSession.cardDao().observeAll().collectAsState(initial = emptyList())
     val banks by VaultSession.bankDao().observeAll().collectAsState(initial = emptyList())
-    val docs by VaultSession.docDao().observeAll().collectAsState(initial = emptyList())
     val notes by VaultSession.noteDao().observeAll().collectAsState(initial = emptyList())
 
     var query by remember { mutableStateOf("") }
+    var filterIndex by remember { mutableIntStateOf(0) }
     val q = query.trim()
-    val visible = entries.filter { e ->
-        q.isBlank() || e.title.contains(q, true) || e.username.contains(q, true) || e.url.contains(q, true)
+
+    val loginCount = entries.size
+    val cardCount = cards.size
+    val noteCount = notes.size
+    val totalItems = loginCount + cardCount + banks.size + notes.size
+
+    val filtered = remember(entries, filterIndex, q) {
+        val base = when (filterIndex) {
+            1 -> entries
+            2 -> emptyList() // cards shown via category nav
+            3 -> emptyList() // notes shown via category nav
+            else -> entries
+        }
+        base.filter { e ->
+            q.isBlank() || e.title.contains(q, true) || e.username.contains(q, true) || e.url.contains(q, true)
+        }
     }
 
-    val totalItems = entries.size + cards.size + banks.size + docs.size + notes.size
-    val favorites = entries.filter { it.favorite }.take(8)
+    val pinned = entries.filter { it.favorite }.take(5)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 80.dp),
+        contentPadding = PaddingValues(bottom = 88.dp),
     ) {
-        // ── Header ──
         item {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(greeting(), style = MaterialTheme.typography.labelMedium, color = Cyan)
-                    Text("My Vault", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
-                    Text("$totalItems items secured", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                }
+                Text("Vault", style = MaterialTheme.typography.headlineMedium, color = TextPrimary,
+                    modifier = Modifier.weight(1f))
                 IconButton(onClick = { nav.navigate("generator") }) {
-                    Icon(Icons.Rounded.AutoAwesome, "Password generator", tint = Cyan)
+                    Icon(Icons.Rounded.AutoAwesome, "Generator", tint = TextSecondary)
                 }
-                IconButton(onClick = { nav.navigate("settings") }) {
-                    Icon(Icons.Rounded.Settings, "Settings", tint = TextSecondary)
-                }
-                IconButton(onClick = onSettings) {
-                    Icon(Icons.Rounded.Settings, "Settings", tint = TextSecondary)
+                IconButton(onClick = onSearch) {
+                    Icon(Icons.Rounded.Search, "Search", tint = TextSecondary)
                 }
             }
         }
 
-        // ── Favorites row ──
-        if (favorites.isNotEmpty()) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 22.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    SectionLabel("FAVORITES")
-                }
-                Spacer(Modifier.height(8.dp))
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 22.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(favorites, key = { it.id }) { entry ->
-                        FavoriteCard(entry) { nav.navigate("entry/${entry.id}") }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-        }
-
-        // ── Pinned search ──
         item {
             VaultTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = "Search vault",
+                label = "Search vault…",
                 modifier = Modifier.padding(horizontal = 22.dp),
                 trailingIcon = { Icon(Icons.Rounded.Search, null, tint = TextSecondary) },
             )
             Spacer(Modifier.height(14.dp))
         }
 
-        // ── Category tiles ──
         item {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                SectionLabel("CATEGORIES")
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-        item {
-            CategoryGrid(nav)
-            Spacer(Modifier.height(16.dp))
+            FilterChipRow(
+                chips = listOf(
+                    "All" to totalItems,
+                    "Logins" to loginCount,
+                    "Cards" to cardCount,
+                    "Notes" to noteCount,
+                ),
+                selectedIndex = filterIndex,
+                onSelect = { idx ->
+                    filterIndex = idx
+                    when (idx) {
+                        2 -> nav.navigate("cards")
+                        3 -> nav.navigate("notes")
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 22.dp),
+            )
+            Spacer(Modifier.height(18.dp))
         }
 
-        // ── Entry list ──
-        if (visible.isEmpty()) {
+        if (pinned.isNotEmpty() && filterIndex == 0) {
             item {
-                Column(
-                    Modifier.fillMaxWidth().padding(40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconBadge(
-                        if (entries.isEmpty()) Icons.Rounded.Inventory2 else Icons.Rounded.SearchOff,
-                        if (entries.isEmpty()) TextSecondary else Coral,
-                        size = 64,
-                    )
-                    Spacer(Modifier.height(16.dp))
+                    Text("Pinned", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                     Text(
-                        if (entries.isEmpty()) "Your vault is empty — tap + below to add your first item"
-                        else "Nothing matches your search.",
-                        color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.fillMaxWidth(),
+                        "See all",
+                        color = Cyan,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.clickable { /* scroll handled by list */ },
                     )
-                    if (entries.isEmpty()) {
-                        Spacer(Modifier.height(16.dp))
-                        GradientButton(
-                            "Add a login",
-                            icon = Icons.Rounded.Add,
-                        ) { nav.navigate("edit/-1") }
-                    }
                 }
+                Spacer(Modifier.height(10.dp))
             }
-        } else {
-            itemsIndexed(visible, key = { _, it -> it.id }) { i, entry ->
-                Box(Modifier.animatedListItem(i)) {
+            items(pinned, key = { "pin_${it.id}" }) { entry ->
+                Box(Modifier.padding(horizontal = 22.dp, vertical = 4.dp).animatedListItem(entry.id.toInt())) {
                     EntryRow(entry) { nav.navigate("entry/${entry.id}") }
                 }
             }
+            item { Spacer(Modifier.height(12.dp)) }
         }
-    }
-}
 
-@Composable
-private fun FavoriteCard(entry: com.family.pswdmngr.data.VaultEntry, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, label = "favScale")
-    Surface(
-        modifier = Modifier.scale(scale).width(140.dp).clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        color = Surface2.copy(alpha = 0.5f),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Icon(Icons.Rounded.Star, null, tint = Amber, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(entry.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (entry.username.isNotBlank()) {
-                Text(entry.username, color = TextSecondary, style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (filterIndex == 0) {
+            item {
+                Text(
+                    "Categories",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(horizontal = 22.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+            item {
+                VaultCategoryGrid(
+                    loginCount = loginCount,
+                    cardCount = cardCount,
+                    bankCount = banks.size,
+                    noteCount = noteCount,
+                    nav = nav,
+                )
+                Spacer(Modifier.height(18.dp))
             }
         }
-    }
-}
 
-@Composable
-private fun CategoryGrid(nav: NavController) {
-    val categories = listOf(
-        CategoryTile("Cards", Icons.Rounded.CreditCard, Cyan) { nav.navigate("cards") },
-        CategoryTile("Banks", Icons.Rounded.AccountBalance, Mint) { nav.navigate("banks") },
-        CategoryTile("Documents", Icons.Rounded.Description, Amber) { nav.navigate("docs") },
-        CategoryTile("Notes", Icons.Rounded.StickyNote2, Coral) { nav.navigate("notes") },
-        CategoryTile("Tasks", Icons.Rounded.TaskAlt, Violet) { nav.navigate("tasks") },
-        CategoryTile("Generator", Icons.Rounded.AutoAwesome, Cyan) { nav.navigate("generator") },
-    )
-    Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        categories.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { cat ->
-                    Box(Modifier.weight(1f)) {
-                        CategoryTileComposable(cat, nav)
+        if (filterIndex <= 1) {
+            if (filtered.isEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        IconBadge(
+                            if (entries.isEmpty()) Icons.Rounded.Inventory2 else Icons.Rounded.SearchOff,
+                            if (entries.isEmpty()) TextSecondary else Coral,
+                            size = 64,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            if (entries.isEmpty()) "Your vault is empty — tap + to add your first login"
+                            else "Nothing matches your search.",
+                            color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (entries.isEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            AccentButton("Add a login", icon = Icons.Rounded.Add) { nav.navigate("edit/-1") }
+                        }
+                    }
+                }
+            } else {
+                if (filterIndex == 0 && filtered.isNotEmpty()) {
+                    item {
+                        Text(
+                            "All logins",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+                itemsIndexed(filtered, key = { _, it -> it.id }) { i, entry ->
+                    Box(Modifier.padding(horizontal = 22.dp, vertical = 4.dp).animatedListItem(i)) {
+                        EntryRow(entry) { nav.navigate("entry/${entry.id}") }
                     }
                 }
             }
@@ -502,37 +505,58 @@ private fun CategoryGrid(nav: NavController) {
     }
 }
 
-private data class CategoryTile(val label: String, val icon: ImageVector, val color: Color, val onClick: () -> Unit)
-
 @Composable
-private fun CategoryTileComposable(cat: CategoryTile, nav: NavController) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.94f else 1f, label = "catScale")
-    Surface(
-        modifier = Modifier.scale(scale).clip(RoundedCornerShape(18.dp)).clickable(
-            interactionSource = interaction, indication = null, onClick = cat.onClick),
-        color = cat.color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(18.dp),
+private fun VaultCategoryGrid(
+    loginCount: Int,
+    cardCount: Int,
+    bankCount: Int,
+    noteCount: Int,
+    nav: NavController,
+) {
+    val tiles = listOf(
+        CategoryTile("Logins", Icons.Rounded.Language, Cyan, "$loginCount") { nav.navigate("edit/-1") },
+        CategoryTile("Cards", Icons.Rounded.CreditCard, Mint, "$cardCount") { nav.navigate("cards") },
+        CategoryTile("Bank", Icons.Rounded.AccountBalance, Violet, "$bankCount") { nav.navigate("banks") },
+        CategoryTile("Notes", Icons.Rounded.StickyNote2, Amber, "$noteCount") { nav.navigate("notes") },
+    )
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(cat.color.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center) {
-                Icon(cat.icon, null, tint = cat.color, modifier = Modifier.size(20.dp))
+        tiles.forEach { cat ->
+            SurfaceCard(
+                modifier = Modifier.weight(1f),
+                onClick = cat.onClick,
+                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 8.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(cat.color.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(cat.icon, null, tint = cat.color, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(cat.label, color = TextPrimary, style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(cat.countLabel, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            Text(cat.label, color = TextPrimary, style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
+private data class CategoryTile(
+    val label: String,
+    val icon: ImageVector,
+    val color: Color,
+    val countLabel: String = "",
+    val onClick: () -> Unit,
+)
+
 @Composable
 private fun EntryRow(entry: com.family.pswdmngr.data.VaultEntry, onClick: () -> Unit) {
-    GlassCard(onClick = onClick) {
+    SurfaceCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             EntryBadge(entry)
             Spacer(Modifier.width(14.dp))
@@ -542,7 +566,7 @@ private fun EntryRow(entry: com.family.pswdmngr.data.VaultEntry, onClick: () -> 
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (entry.favorite) {
                         Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Rounded.Star, null, tint = Amber, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Rounded.PushPin, null, tint = Cyan, modifier = Modifier.size(14.dp))
                     }
                 }
                 if (entry.username.isNotBlank()) {
@@ -550,7 +574,7 @@ private fun EntryRow(entry: com.family.pswdmngr.data.VaultEntry, onClick: () -> 
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Icon(Icons.Rounded.ChevronRight, null, tint = TextSecondary)
+            Icon(Icons.Rounded.ChevronRight, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -717,15 +741,17 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
 
+    val recentQueries = remember { mutableStateListOf<String>() }
+
     val results = remember(q, entries, cards, banks, docs, notes) {
         if (q.isBlank()) emptyList()
         else buildList {
             entries.filter { it.title.contains(q, true) || it.username.contains(q, true) || it.url.contains(q, true) }
-                .forEach { add(SearchResult("Login", it.title, it.username, "entry/${it.id}", Icons.Rounded.Language, Violet)) }
+                .forEach { add(SearchResult("Login", it.title, it.username, "entry/${it.id}", Icons.Rounded.Language, Cyan)) }
             cards.filter { it.label.contains(q, true) || it.bankName.contains(q, true) || it.number.contains(q, true) }
-                .forEach { add(SearchResult("Card", it.label, it.bankName, "cardDetail/${it.id}", Icons.Rounded.CreditCard, Cyan)) }
+                .forEach { add(SearchResult("Card", it.label, it.bankName, "cardDetail/${it.id}", Icons.Rounded.CreditCard, Mint)) }
             banks.filter { it.bankName.contains(q, true) || it.accountNumber.contains(q, true) }
-                .forEach { add(SearchResult("Bank", it.bankName, it.accountNumber.takeLast(4), "bankDetail/${it.id}", Icons.Rounded.AccountBalance, Mint)) }
+                .forEach { add(SearchResult("Bank", it.bankName, it.accountNumber.takeLast(4), "bankDetail/${it.id}", Icons.Rounded.AccountBalance, Violet)) }
             docs.filter { it.title.contains(q, true) || it.number.contains(q, true) }
                 .forEach { add(SearchResult("Doc", it.title.ifBlank { com.family.pswdmngr.data.DocType.label(it.docType) }, it.number, "docDetail/${it.id}", Icons.Rounded.Description, Amber)) }
             notes.filter { it.title.contains(q, true) || it.body.contains(q, true) }
@@ -743,15 +769,45 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
             VaultTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = "Search all entries, cards, banks, docs, notes…",
+                label = "Search entries, cards, notes…",
                 trailingIcon = { Icon(Icons.Rounded.Search, null, tint = TextSecondary) },
             )
             Spacer(Modifier.height(16.dp))
         }
         if (q.isBlank()) {
+            if (recentQueries.isNotEmpty()) {
+                item {
+                    Text("Recent searches", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Spacer(Modifier.height(10.dp))
+                }
+                items(recentQueries.size, key = { "rq_$it" }) { i ->
+                    val term = recentQueries[i]
+                    SurfaceCard(onClick = { query = term }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.History, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(term, color = TextPrimary, style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f))
+                            Icon(Icons.Rounded.NorthWest, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
             item {
-                EmptyState(Icons.Rounded.Search, TextSecondary, "Tap the search bar above",
-                    "Find any login, card, bank account, document, or note instantly.")
+                Text("Categories", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Spacer(Modifier.height(10.dp))
+            }
+            item {
+                SearchCategoryGrid(
+                    loginCount = entries.size,
+                    cardCount = cards.size,
+                    bankCount = banks.size,
+                    noteCount = notes.size,
+                    docCount = docs.size,
+                    nav = nav,
+                )
             }
         } else if (results.isEmpty()) {
             item {
@@ -766,7 +822,13 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
             }
             items(results.size, key = { "sr_$it" }) { i ->
                 val r = results[i]
-                GlassCard(onClick = { nav.navigate(r.route) }) {
+                SurfaceCard(onClick = {
+                    if (!recentQueries.contains(q)) {
+                        recentQueries.add(0, q)
+                        if (recentQueries.size > 5) recentQueries.removeAt(recentQueries.lastIndex)
+                    }
+                    nav.navigate(r.route)
+                }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconBadge(r.icon, r.color, size = 38)
                         Spacer(Modifier.width(12.dp))
@@ -784,6 +846,54 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
                 Spacer(Modifier.height(8.dp))
             }
         }
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+private fun SearchCategoryGrid(
+    loginCount: Int,
+    cardCount: Int,
+    bankCount: Int,
+    noteCount: Int,
+    docCount: Int,
+    nav: NavController,
+) {
+    data class SearchCat(val label: String, val icon: ImageVector, val color: Color, val count: Int, val route: String)
+    val cats = listOf(
+        SearchCat("Logins", Icons.Rounded.Language, Cyan, loginCount, "edit/-1"),
+        SearchCat("Cards", Icons.Rounded.CreditCard, Mint, cardCount, "cards"),
+        SearchCat("Bank", Icons.Rounded.AccountBalance, Violet, bankCount, "banks"),
+        SearchCat("Notes", Icons.Rounded.StickyNote2, Amber, noteCount, "notes"),
+        SearchCat("Docs", Icons.Rounded.Description, Coral, docCount, "docs"),
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        cats.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { cat ->
+                    SurfaceCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = { nav.navigate(cat.route) },
+                        contentPadding = PaddingValues(16.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(cat.color.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(cat.icon, null, tint = cat.color, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(cat.label, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                                Text("${cat.count} items", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
 }
 
@@ -796,30 +906,64 @@ private data class SearchResult(
 
 @Composable
 private fun MoreTab(nav: NavController, snackbar: SnackbarHostState) {
+    val entries by VaultSession.dao().observeAll().collectAsState(initial = emptyList())
+    val strongCount = remember(entries) {
+        entries.count { com.family.pswdmngr.crypto.PasswordGenerator.entropy(it.password) >= 60 }
+    }
+    val scorePct = if (entries.isEmpty()) 100 else (strongCount * 100 / entries.size)
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(22.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             Text("More", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
             Spacer(Modifier.height(16.dp))
         }
-        item { SectionLabel("TOOLS") }
-        item { MoreTile("Password generator", Icons.Rounded.AutoAwesome, Cyan) { nav.navigate("generator") } }
+        item {
+            SurfaceCard(contentPadding = PaddingValues(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            progress = { scorePct / 100f },
+                            modifier = Modifier.size(64.dp),
+                            color = if (scorePct >= 70) Mint else Amber,
+                            trackColor = Surface1,
+                            strokeWidth = 5.dp,
+                        )
+                        Text("$scorePct%", color = TextPrimary, style = MaterialTheme.typography.labelMedium)
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            if (scorePct >= 70) "Strong" else "Needs attention",
+                            color = if (scorePct >= 70) Mint else Amber,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Security score based on password strength",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        item { SectionLabel("SECURITY") }
         item { MoreTile("Password health", Icons.Rounded.HealthAndSafety, Mint) { nav.navigate("passwordHealth") } }
+        item { MoreTile("Password generator", Icons.Rounded.AutoAwesome, Cyan) { nav.navigate("generator") } }
         item { MoreTile("Recycle bin", Icons.Rounded.DeleteSweep, Coral) { nav.navigate("recycleBin") } }
-        item { MoreTile("Argon2id benchmark", Icons.Rounded.Speed, Violet) { nav.navigate("argon2benchmark") } }
 
-        item { Spacer(Modifier.height(4.dp)); SectionLabel("VAULT SECTIONS") }
+        item { Spacer(Modifier.height(4.dp)); SectionLabel("VAULT") }
         item { MoreTile("Bank accounts", Icons.Rounded.AccountBalance, Mint) { nav.navigate("banks") } }
         item { MoreTile("Documents", Icons.Rounded.Description, Amber) { nav.navigate("docs") } }
         item { MoreTile("Google accounts", Icons.Rounded.AccountCircle, Color(0xFF4285F4)) { nav.navigate("googleAccounts") } }
-        item { MoreTile("SBI Rewardz", Icons.Rounded.CardGiftcard, Amber) { nav.navigate("sbiRewardz") } }
         item { MoreTile("CSD Canteen cards", Icons.Rounded.ShoppingBag, Amber) { nav.navigate("csd") } }
 
-        item { Spacer(Modifier.height(4.dp)); SectionLabel("SETTINGS") }
+        item { Spacer(Modifier.height(4.dp)); SectionLabel("GENERAL") }
         item { MoreTile("Settings", Icons.Rounded.Settings, TextSecondary) { nav.navigate("settings") } }
+        item { MoreTile("Argon2id benchmark", Icons.Rounded.Speed, Violet) { nav.navigate("argon2benchmark") } }
 
         item { Spacer(Modifier.height(80.dp)) }
     }

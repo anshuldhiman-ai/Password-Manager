@@ -2,16 +2,15 @@ package com.family.pswdmngr.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,18 +46,60 @@ fun OnboardingScreen(nav: NavController) {
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(60.dp))
-        IconBadge(Icons.Rounded.Shield, Violet, size = 84)
+        Spacer(Modifier.height(48.dp))
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(120.dp).clip(CircleShape)
+                    .background(GlowCyan),
+            )
+            IconBadge(Icons.Rounded.Shield, Cyan, size = 84)
+        }
         Spacer(Modifier.height(24.dp))
-        Text("Create your vault", style = MaterialTheme.typography.displaySmall, color = TextPrimary)
+        Text("Welcome", style = MaterialTheme.typography.displaySmall, color = TextPrimary)
         Spacer(Modifier.height(8.dp))
         Text(
-            "One master password protects everything.\nIt is never stored — write it down and keep it safe.",
+            "Your passwords, cards, and notes — fully offline and encrypted.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(28.dp))
+
+        val features = listOf(
+            Icons.Rounded.WifiOff to "100% Offline — no network ever",
+            Icons.Rounded.Lock to "End-to-end encrypted vault",
+            Icons.Rounded.Fingerprint to "Biometric quick unlock",
+            Icons.Rounded.Backup to "Encrypted backup & restore",
+        )
+        features.forEach { (icon, text) ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape)
+                        .background(Cyan.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, null, tint = Cyan, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Text(text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+        Text("Create master password", style = MaterialTheme.typography.titleMedium, color = TextPrimary,
+            modifier = Modifier.align(Alignment.Start))
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "One password protects everything. It is never stored — write it down and keep it safe.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.align(Alignment.Start),
+        )
+        Spacer(Modifier.height(20.dp))
 
         VaultTextField(
             value = password,
@@ -117,12 +158,12 @@ fun OnboardingScreen(nav: NavController) {
 
         Spacer(Modifier.weight(1f))
         if (working) {
-            CircularProgressIndicator(color = Violet)
+            CircularProgressIndicator(color = Cyan)
             Spacer(Modifier.height(8.dp))
             Text("Deriving encryption key…", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
         } else {
-            GradientButton(
-                "Create vault",
+            AccentButton(
+                "Get started",
                 modifier = Modifier.fillMaxWidth(),
                 enabled = strong && match,
             ) {

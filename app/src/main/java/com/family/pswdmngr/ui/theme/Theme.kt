@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-// Dribbble-inspired palette: deep navy base, electric violet + cyan accents
+// Reference UI: deep navy base, cyan/teal primary accents
 val Midnight = Color(0xFF0B0E1A)
 val Surface1 = Color(0xFF141829)
 val Surface2 = Color(0xFF1C2138)
@@ -21,19 +21,20 @@ val Amber = Color(0xFFFFC46B)
 val TextPrimary = Color(0xFFF2F4FF)
 val TextSecondary = Color(0xFF8A91B4)
 
-val AccentGradient = Brush.linearGradient(listOf(Violet, Cyan))
-val CardGradient = Brush.linearGradient(listOf(Color(0xFF1E2340), Color(0xFF161A2E)))
-val HeroGradient = Brush.verticalGradient(listOf(Color(0xFF2A2260), Midnight))
+val AccentGradient = Brush.linearGradient(listOf(Cyan, Mint))
+val CardGradient = Brush.linearGradient(listOf(Surface2, Surface1))
+val HeroGradient = Brush.verticalGradient(listOf(Color(0xFF0F1528), Midnight))
 
-// Premium-pass tokens
-val Stroke = Color(0x1AFFFFFF)            // hairline borders on glass surfaces
-val SurfaceGlassBright = Color(0x1FFFFFFF) // pressed/hover glass
-val GlowViolet = Color(0x337C5CFF)         // soft hero glow
+// Surface + hero tokens
+val Stroke = Color(0x1AFFFFFF)
+val SurfaceGlassBright = Color(0x1FFFFFFF)
+val GlowCyan = Color(0x334DD0E1)
+val GlowViolet = Color(0x337C5CFF)
 
 private val DarkScheme = darkColorScheme(
-    primary = Violet,
-    onPrimary = TextPrimary,
-    secondary = Cyan,
+    primary = Cyan,
+    onPrimary = Midnight,
+    secondary = Mint,
     background = Midnight,
     onBackground = TextPrimary,
     surface = Surface1,

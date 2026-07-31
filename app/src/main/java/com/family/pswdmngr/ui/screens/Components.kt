@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -37,7 +38,34 @@ import com.family.pswdmngr.data.EntryCategory
 import com.family.pswdmngr.ui.theme.*
 import kotlinx.coroutines.delay
 
-/** Glassmorphic card used across the app — hairline border + press-scale. */
+/** Flat surface card — default list/detail container per reference UI. */
+@Composable
+fun SurfaceCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed && onClick != null) 0.98f else 1f, label = "surfacePress")
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface2.copy(alpha = 0.72f))
+            .border(1.dp, Stroke, RoundedCornerShape(16.dp))
+            .then(
+                if (onClick != null)
+                    Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                else Modifier
+            )
+            .padding(contentPadding),
+        content = content,
+    )
+}
+
+/** Glassmorphic card — reserved for unlock/hero emphasis only. */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -50,11 +78,11 @@ fun GlassCard(
     Column(
         modifier = modifier
             .scale(scale)
-            .shadow(12.dp, RoundedCornerShape(22.dp), ambientColor = Color.Black.copy(alpha = 0.24f),
-                spotColor = Color.Black.copy(alpha = 0.34f))
-            .clip(RoundedCornerShape(22.dp))
+            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color.Black.copy(alpha = 0.18f),
+                spotColor = Color.Black.copy(alpha = 0.28f))
+            .clip(RoundedCornerShape(20.dp))
             .background(CardGradient)
-            .border(1.dp, Stroke, RoundedCornerShape(22.dp))
+            .border(1.dp, Stroke, RoundedCornerShape(20.dp))
             .then(
                 if (onClick != null)
                     Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick)
@@ -65,7 +93,35 @@ fun GlassCard(
     )
 }
 
-/** Gradient pill button — primary CTA style. */
+/** Primary CTA — solid cyan pill per reference UI. */
+@Composable
+fun AccentButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    val bg = if (enabled) Cyan else Surface2
+    val fg = if (enabled) Midnight else TextSecondary
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 16.dp, horizontal = 24.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.let {
+            Icon(it, null, tint = fg, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelLarge, color = fg)
+    }
+}
+
+/** @see AccentButton */
 @Composable
 fun GradientButton(
     text: String,
@@ -73,22 +129,69 @@ fun GradientButton(
     enabled: Boolean = true,
     icon: ImageVector? = null,
     onClick: () -> Unit,
+) = AccentButton(text, modifier, enabled, icon, onClick)
+
+/** Outlined secondary action button. */
+@Composable
+fun OutlineButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
 ) {
-    val bg = if (enabled) AccentGradient else Brush.linearGradient(listOf(Surface2, Surface2))
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(bg)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Stroke, RoundedCornerShape(16.dp))
+            .background(Surface2.copy(alpha = 0.5f))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 17.dp, horizontal = 24.dp),
+            .padding(vertical = 16.dp, horizontal = 24.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        icon?.let {
-            Icon(it, null, tint = TextPrimary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-        }
         Text(text, style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+    }
+}
+
+/** Horizontal filter chips with counts — vault/search screens. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FilterChipRow(
+    chips: List<Pair<String, Int>>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(chips.size) { i ->
+            val (label, count) = chips[i]
+            val selected = selectedIndex == i
+            FilterChip(
+                selected = selected,
+                onClick = { onSelect(i) },
+                label = {
+                    Text(
+                        if (count >= 0) "$label  $count" else label,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Cyan.copy(alpha = 0.18f),
+                    selectedLabelColor = Cyan,
+                    containerColor = Surface2.copy(alpha = 0.55f),
+                    labelColor = TextSecondary,
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selected,
+                    borderColor = if (selected) Cyan.copy(alpha = 0.35f) else Stroke,
+                    selectedBorderColor = Cyan.copy(alpha = 0.35f),
+                ),
+            )
+        }
     }
 }
 
@@ -256,13 +359,13 @@ fun VaultTextField(
         trailingIcon = trailingIcon,
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Violet,
-            unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+            focusedBorderColor = Cyan,
+            unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
             focusedLabelColor = Cyan,
             unfocusedLabelColor = TextSecondary,
             cursorColor = Cyan,
-            focusedContainerColor = Surface2.copy(alpha = 0.82f),
-            unfocusedContainerColor = Surface2.copy(alpha = 0.42f),
+            focusedContainerColor = Surface2.copy(alpha = 0.85f),
+            unfocusedContainerColor = Surface2.copy(alpha = 0.55f),
         ),
     )
 }

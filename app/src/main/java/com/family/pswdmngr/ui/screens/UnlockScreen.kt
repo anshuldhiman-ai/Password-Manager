@@ -64,6 +64,7 @@ fun UnlockScreen(nav: NavController) {
     var error by remember { mutableStateOf<String?>(null) }
     var working by remember { mutableStateOf(false) }
     var unlocking by remember { mutableStateOf(false) } // success exit animation
+    var showPasswordForm by remember { mutableStateOf(isRooted || !bioAvailable) }
 
     // --- Root / tamper state ---
     val isRooted = remember { RootDetector.isRooted(ctx) }
@@ -174,7 +175,9 @@ fun UnlockScreen(nav: NavController) {
     }
 
     // Auto-trigger biometric if available (and device not rooted)
-    LaunchedEffect(Unit) { if (bioAvailable) biometricUnlock() }
+    LaunchedEffect(bioAvailable) {
+        if (bioAvailable && !showPasswordForm) biometricUnlock()
+    }
 
     val exitScale by animateFloatAsState(
         if (unlocking) 1.15f else 1f, tween(260, easing = FastOutSlowInEasing), label = "exitScale")
@@ -216,13 +219,13 @@ fun UnlockScreen(nav: NavController) {
         Box(contentAlignment = Alignment.Center) {
             Box(
                 Modifier
-                    .size(110.dp)
+                    .size(130.dp)
                     .scale(glow)
                     .clip(CircleShape)
-                    .background(Violet.copy(alpha = 0.18f)),
+                    .background(GlowCyan),
             )
             Box(Modifier.scale(logoScale)) {
-                IconBadge(if (unlocking || failCount > 5) Icons.Rounded.Shield else Icons.Rounded.Lock, Cyan, size = 84)
+                IconBadge(Icons.Rounded.Shield, Cyan, size = 88)
             }
         }
 
@@ -234,11 +237,7 @@ fun UnlockScreen(nav: NavController) {
             Text("Welcome back", style = MaterialTheme.typography.displaySmall, color = TextPrimary)
             Spacer(Modifier.height(8.dp))
             Text(
-                when {
-                    isRooted -> "Rooted device — enter your master password"
-                    bioAvailable -> "Use fingerprint, face or your master password"
-                    else -> "Enter your master password"
-                },
+                "Unlock your vault to continue",
                 color = TextSecondary, textAlign = TextAlign.Center,
             )
             if (failCount > 0 && lockoutMs == 0L) {
@@ -250,77 +249,110 @@ fun UnlockScreen(nav: NavController) {
             }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(if (showPasswordForm) 24.dp else 40.dp))
 
-        Box(Modifier.graphicsLayer { translationX = shake.value }.alpha(contentAlpha)) {
-            VaultTextField(
-                value = password,
-                onValueChange = { password = it; error = null },
-                enabled = lockoutMs <= 0,
-                label = "Master password",
-                visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                trailingIcon = {
-                    IconButton(onClick = { showPw = !showPw }) {
-                        Icon(
-                            if (showPw) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                            null, tint = TextSecondary,
-                        )
-                    }
-                },
-            )
-        }
+        if (showPasswordForm || !bioAvailable || isRooted) {
+            if (isRooted) {
+                Text(
+                    "Rooted device — enter your master password",
+                    color = Amber, style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.alpha(contentAlpha),
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+            Box(Modifier.graphicsLayer { translationX = shake.value }.alpha(contentAlpha)) {
+                VaultTextField(
+                    value = password,
+                    onValueChange = { password = it; error = null },
+                    enabled = lockoutMs <= 0,
+                    label = "Master password",
+                    visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    trailingIcon = {
+                        IconButton(onClick = { showPw = !showPw }) {
+                            Icon(
+                                if (showPw) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                null, tint = TextSecondary,
+                            )
+                        }
+                    },
+                )
+            }
 
-        AnimatedVisibility(
-            visible = error != null,
-            enter = fadeIn() + slideInVertically { -it / 2 },
-            exit = fadeOut(),
-        ) {
-            Column {
-                Spacer(Modifier.height(8.dp))
-                Text(error ?: "", color = Coral, style = MaterialTheme.typography.labelMedium)
+            AnimatedVisibility(
+                visible = error != null,
+                enter = fadeIn() + slideInVertically { -it / 2 },
+                exit = fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error ?: "", color = Coral, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        } else if (bioAvailable && lockoutMs <= 0) {
+            Column(
+                Modifier.alpha(contentAlpha),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                IconButton(
+                    onClick = { biometricUnlock() },
+                    modifier = Modifier.size(80.dp),
+                ) {
+                    Icon(Icons.Rounded.Fingerprint, "Biometric unlock", tint = Cyan, modifier = Modifier.size(56.dp))
+                }
+                Text("Touch to unlock", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
             }
         }
 
         Spacer(Modifier.weight(1f))
 
         if (working) {
-            CircularProgressIndicator(color = Violet)
+            CircularProgressIndicator(color = Cyan)
             Spacer(Modifier.height(8.dp))
             Text("Deriving key…", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
         } else {
             Column(Modifier.alpha(contentAlpha), horizontalAlignment = Alignment.CenterHorizontally) {
-                GradientButton(
-                    when {
-                        lockoutMs > 0 -> "Wait ${LockoutTracker.remainingLabel(ctx)}"
-                        else -> "Unlock"
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = password.isNotEmpty() && lockoutMs <= 0,
-                ) {
-                    working = true
-                    scope.launch {
-                        val ok = withContext(Dispatchers.Default) {
-                            VaultSession.unlock(ctx, password.toCharArray())
-                        }
-                        working = false
-                        if (ok) {
-                            unlockOk()
-                        } else {
-                            password = ""
-                            error = "Wrong password"
-                            handleAutoWipe()
+                if (showPasswordForm || !bioAvailable || isRooted) {
+                    AccentButton(
+                        when {
+                            lockoutMs > 0 -> "Wait ${LockoutTracker.remainingLabel(ctx)}"
+                            else -> "Unlock"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = password.isNotEmpty() && lockoutMs <= 0,
+                    ) {
+                        working = true
+                        scope.launch {
+                            val ok = withContext(Dispatchers.Default) {
+                                VaultSession.unlock(ctx, password.toCharArray())
+                            }
+                            working = false
+                            if (ok) {
+                                unlockOk()
+                            } else {
+                                password = ""
+                                error = "Wrong password"
+                                handleAutoWipe()
+                            }
                         }
                     }
                 }
 
-                // Biometric quick unlock button
-                if (bioAvailable && lockoutMs <= 0) {
+                if (bioAvailable && lockoutMs <= 0 && !isRooted) {
                     Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = { biometricUnlock() }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Rounded.Fingerprint, null, tint = Cyan)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Quick unlock", color = Cyan)
+                    TextButton(
+                        onClick = {
+                            showPasswordForm = !showPasswordForm
+                            if (!showPasswordForm && bioAvailable) biometricUnlock()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            if (showPasswordForm) "Use biometric instead" else "Use master password",
+                            color = Cyan,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
 
