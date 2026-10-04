@@ -58,6 +58,7 @@ fun SettingsScreen(nav: NavController) {
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var selectedCategories by remember { mutableStateOf(setOf("entries", "cards", "banks", "documents", "notes", "tasks")) }
     var pendingSelectiveExport by remember { mutableStateOf(false) }
+    var themeMode by remember { mutableStateOf(ThemePrefs.mode) }
 
     val bioSupported = remember {
         BiometricManager.from(ctx)
@@ -372,6 +373,39 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
 
+            item { Spacer(Modifier.height(4.dp)); SectionLabel("APPEARANCE") }
+            item {
+                GlassCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconBadge(Icons.Rounded.DarkMode, Violet)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Theme", color = TextPrimary,
+                                style = MaterialTheme.typography.titleMedium)
+                            Text(themeModeTagline(themeMode), color = TextSecondary,
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().horizontalScrollChips(),
+                    ) {
+                        ThemeMode.entries.forEach { m ->
+                            FilterChip(
+                                selected = themeMode == m,
+                                onClick = { ThemePrefs.set(ctx, m); themeMode = m },
+                                label = { Text(themeModeName(m)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Cyan.copy(alpha = 0.22f),
+                                    selectedLabelColor = TextPrimary, labelColor = TextSecondary,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+
             item { Spacer(Modifier.height(4.dp)); SectionLabel("ABOUT") }
             item {
                 GlassCard {
@@ -509,7 +543,7 @@ fun SettingsScreen(nav: NavController) {
                                     else "Export failed: ${e.message}"
                                 )
                             } finally {
-                                pw.fill(' ')
+                                pw.fill('\u0000')
                             }
                         }
                     },
@@ -605,6 +639,18 @@ private fun RecoveryKeyViewDialog(
 @Composable
 private fun Modifier.horizontalScrollChips(): Modifier =
     this.horizontalScroll(rememberScrollState())
+
+private fun themeModeName(m: ThemeMode) = when (m) {
+    ThemeMode.SYSTEM -> "System"
+    ThemeMode.LIGHT -> "Light"
+    ThemeMode.DARK -> "Dark"
+}
+
+private fun themeModeTagline(m: ThemeMode) = when (m) {
+    ThemeMode.SYSTEM -> "Follows your phone's light/dark setting"
+    ThemeMode.LIGHT -> "Always light, even when the phone is dark"
+    ThemeMode.DARK -> "Always dark, even when the phone is light"
+}
 
 @Composable
 private fun AboutRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String) {

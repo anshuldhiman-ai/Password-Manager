@@ -154,10 +154,8 @@ fun VaultScreen(nav: NavController) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item { HubTile("Cards", Icons.Rounded.CreditCard, Cyan) { nav.navigate("cards") } }
-                item { HubTile("CSD", Icons.Rounded.ShoppingBag, Amber) { nav.navigate("csd") } }
                 item { HubTile("Google", Icons.Rounded.AccountCircle, Color(0xFF4285F4)) { nav.navigate("googleAccounts") } }
                 item { HubTile("Banks", Icons.Rounded.AccountBalance, Mint) { nav.navigate("banks") } }
-                item { HubTile("SBI Rewardz", Icons.Rounded.CardGiftcard, Amber) { nav.navigate("sbiRewardz") } }
                 item { HubTile("Documents", Icons.Rounded.Badge, Amber) { nav.navigate("docs") } }
                 item { HubTile("Notes", Icons.Rounded.StickyNote2, Coral) { nav.navigate("notes") } }
                 item { HubTile("Tasks", Icons.Rounded.TaskAlt, Violet) { nav.navigate("tasks") } }

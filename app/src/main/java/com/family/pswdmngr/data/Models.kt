@@ -29,13 +29,12 @@ fun fieldsToJson(fields: List<CustomField>): String = JSONArray().apply {
 
 object CardType {
     const val DEBIT = "DEBIT"; const val CREDIT = "CREDIT"; const val PREPAID = "PREPAID"
-    const val CSD = "CSD"; const val OTHER = "OTHER"
-    /** The personal-bank wallet is intentionally limited to debit and credit cards.
-     * CSD is managed in its own area, so it never clashes with bank-card entry. */
+    const val OTHER = "OTHER"
+    /** The personal-bank wallet is intentionally limited to debit and credit cards. */
     val ALL = listOf(DEBIT, CREDIT)
     fun label(t: String) = when (t) {
         DEBIT -> "Debit"; CREDIT -> "Credit"; PREPAID -> "Prepaid"
-        CSD -> "CSD Canteen"; else -> "Other"
+        else -> "Other"
     }
 }
 
@@ -52,7 +51,6 @@ data class CardEntry(
     val expiry: String = "",     // MM/YY
     val cvv: String = "",
     val pin: String = "",
-    val serialNo: String = "",   // CSD canteen card serial number
     val fieldsJson: String = "[]",
     val favorite: Boolean = false,
     val createdAt: Long = 0,
@@ -259,7 +257,8 @@ interface NoteDao {
 object TrashType {
     const val LOGIN = "LOGIN"; const val CARD = "CARD"; const val BANK = "BANK"
     const val DOC = "DOC"; const val NOTE = "NOTE"; const val TASK = "TASK"
-    val ALL = listOf(LOGIN, CARD, BANK, DOC, NOTE, TASK)
+    const val REMINDER = "REMINDER"
+    val ALL = listOf(LOGIN, CARD, BANK, DOC, NOTE, TASK, REMINDER)
     const val DAYS_UNTIL_PURGE = 30
 }
 
@@ -324,6 +323,65 @@ data class TaskItem(
     val updatedAt: Long = 0,
 )
 
+/* ---------- Smart Reminders (linked to vault items) ---------- */
+
+object ReminderType {
+    const val PASSWORD_CHANGE = "PASSWORD_CHANGE"
+    const val BILL_PAYMENT = "BILL_PAYMENT"
+    const val ACCOUNT_RENEWAL = "ACCOUNT_RENEWAL"
+    const val SECURITY_CHECK = "SECURITY_CHECK"
+    const val CUSTOM = "CUSTOM"
+    val ALL = listOf(PASSWORD_CHANGE, BILL_PAYMENT, ACCOUNT_RENEWAL, SECURITY_CHECK, CUSTOM)
+    fun label(t: String) = when (t) {
+        PASSWORD_CHANGE -> "Password change"
+        BILL_PAYMENT -> "Bill payment"
+        ACCOUNT_RENEWAL -> "Account renewal"
+        SECURITY_CHECK -> "Security check"
+        else -> "Custom"
+    }
+}
+
+@Entity(tableName = "reminders")
+data class Reminder(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String = "",
+    val reminderType: String = ReminderType.CUSTOM,
+    val linkedItemType: String = "", // "LOGIN", "CARD", "BANK", etc.
+    val linkedItemId: Long = 0, // ID of the linked vault item
+    val dueAt: Long = 0,        // Timestamp when reminder is due
+    val completed: Boolean = false,
+    val completedAt: Long = 0,
+    val recurring: Boolean = false,
+    val recurringIntervalDays: Int = 0, // 0 = not recurring
+    val notes: String = "",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
+@Dao
+interface ReminderDao {
+    @Query("SELECT * FROM reminders ORDER BY dueAt ASC")
+    fun observeAll(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE completed = 0 ORDER BY dueAt ASC")
+    fun observePending(): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE linkedItemType = :type AND linkedItemId = :itemId ORDER BY dueAt ASC")
+    fun observeForItem(type: String, itemId: Long): Flow<List<Reminder>>
+
+    @Query("SELECT * FROM reminders WHERE id = :id")
+    suspend fun byId(id: Long): Reminder?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(reminder: Reminder): Long
+
+    @Delete
+    suspend fun delete(reminder: Reminder)
+
+    @Query("SELECT * FROM reminders")
+    suspend fun allOnce(): List<Reminder>
+}
+
 @Dao
 interface TaskDao {
     @Query("SELECT * FROM task_lists ORDER BY position ASC, id ASC")
@@ -378,7 +436,7 @@ fun VaultEntry.toTrashJson(): String = JSONObject().apply {
 fun vaultEntryFromJson(json: String): VaultEntry {
     val o = JSONObject(json)
     return VaultEntry(
-        title = o.getString("title"), category = EntryCategory.valueOf(o.optString("category", "LOGIN")),
+        title = o.getString("title"), category = entryCategoryFromName(o.optString("category")),
         username = o.optString("username"), password = o.optString("password"),
         url = o.optString("url"), notes = o.optString("notes"),
         totpSecret = o.optString("totp"), favorite = o.optBoolean("favorite"),
@@ -390,7 +448,7 @@ fun CardEntry.toTrashJson(): String = JSONObject().apply {
     put("label", label); put("bankName", bankName); put("cardType", cardType)
     put("network", network); put("productId", productId)
     put("number", number); put("holder", holder); put("expiry", expiry)
-    put("cvv", cvv); put("pin", pin); put("serialNo", serialNo)
+    put("cvv", cvv); put("pin", pin)
     put("fieldsJson", fieldsJson); put("favorite", favorite)
     put("createdAt", createdAt); put("updatedAt", updatedAt)
 }.toString()
@@ -403,7 +461,7 @@ fun cardEntryFromJson(json: String): CardEntry {
         network = o.optString("network", "AUTO"), productId = o.optString("productId"),
         number = o.optString("number"), holder = o.optString("holder"),
         expiry = o.optString("expiry"), cvv = o.optString("cvv"), pin = o.optString("pin"),
-        serialNo = o.optString("serialNo"), fieldsJson = o.optString("fieldsJson", "[]"),
+        fieldsJson = o.optString("fieldsJson", "[]"),
         favorite = o.optBoolean("favorite"), createdAt = o.optLong("createdAt"),
         updatedAt = o.optLong("updatedAt"),
     )
@@ -485,6 +543,26 @@ fun taskItemFromJson(json: String): TaskItem {
         completed = o.optBoolean("completed"), completedAt = o.optLong("completedAt"),
         position = o.optInt("position"), createdAt = o.optLong("createdAt"),
         updatedAt = o.optLong("updatedAt"),
+    )
+}
+
+fun Reminder.toTrashJson(): String = JSONObject().apply {
+    put("title", title); put("reminderType", reminderType)
+    put("linkedItemType", linkedItemType); put("linkedItemId", linkedItemId)
+    put("dueAt", dueAt); put("completed", completed); put("completedAt", completedAt)
+    put("recurring", recurring); put("recurringIntervalDays", recurringIntervalDays)
+    put("notes", notes); put("createdAt", createdAt); put("updatedAt", updatedAt)
+}.toString()
+
+fun reminderFromJson(json: String): Reminder {
+    val o = JSONObject(json)
+    return Reminder(
+        title = o.optString("title"), reminderType = o.optString("reminderType", ReminderType.CUSTOM),
+        linkedItemType = o.optString("linkedItemType"), linkedItemId = o.optLong("linkedItemId"),
+        dueAt = o.optLong("dueAt"), completed = o.optBoolean("completed"),
+        completedAt = o.optLong("completedAt"), recurring = o.optBoolean("recurring"),
+        recurringIntervalDays = o.optInt("recurringIntervalDays"), notes = o.optString("notes"),
+        createdAt = o.optLong("createdAt"), updatedAt = o.optLong("updatedAt"),
     )
 }
 

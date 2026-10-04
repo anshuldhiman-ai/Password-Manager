@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -49,7 +50,9 @@ fun docIcon(t: String): ImageVector = when (t) {
     else -> Icons.Rounded.Description
 }
 
-fun docColor(t: String) = when (t) {
+@Composable
+@ReadOnlyComposable
+fun docColor(t: String): Color = when (t) {
     "AADHAAR" -> Amber
     "PAN" -> Cyan
     "PASSPORT" -> Violet

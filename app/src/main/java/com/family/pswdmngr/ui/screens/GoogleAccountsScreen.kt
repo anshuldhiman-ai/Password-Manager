@@ -98,7 +98,7 @@ fun GoogleAccountEditor(nav: NavController, id: Long) {
             VaultTextField(totp, { totp = it.trim().uppercase() }, "2FA secret (optional)")
             if (totp.isNotBlank() && !Totp.isValidSecret(totp)) Text("Enter a valid Base32 TOTP secret.", color = Coral, style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.weight(1f)); GradientButton("Save Google account", Modifier.fillMaxWidth(), enabled = email.isNotBlank() && (totp.isBlank() || Totp.isValidSecret(totp))) {
-                scope.launch { val now = System.currentTimeMillis(); VaultSession.dao().upsert((original ?: VaultEntry(title = "Google account", createdAt = now, updatedAt = now)).copy(title = label.trim().ifBlank { "Google account" }, category = EntryCategory.LOGIN, username = email, password = password, totpSecret = totp, url = GOOGLE_URL, updatedAt = now)); nav.popBackStack() }
+                scope.launch { val now = System.currentTimeMillis(); VaultSession.dao().upsert((original ?: VaultEntry(title = "Google account", createdAt = now, updatedAt = now)).copy(title = label.trim().ifBlank { "Google account" }, category = EntryCategory.WEBSITE_APP, username = email, password = password, totpSecret = totp, url = GOOGLE_URL, updatedAt = now)); nav.popBackStack() }
             }
         }
     }

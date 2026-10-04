@@ -19,7 +19,7 @@ import java.io.File
 object BackupManager {
 
     private val MAGIC = "PSWDMGR1".toByteArray()
-    private val ALL_CATEGORIES = setOf("entries", "cards", "banks", "documents", "notes", "tasks")
+    private val ALL_CATEGORIES = setOf("entries", "cards", "banks", "documents", "notes", "tasks", "reminders")
 
     /**
      * Full export — all categories.
@@ -38,6 +38,8 @@ object BackupManager {
             root.put("entries", JSONArray().apply {
                 VaultSession.dao().allOnce().forEach { e ->
                     put(JSONObject().apply {
+                        // ids are export-only: import remaps them (see importV2)
+                        put("id", e.id)
                         put("title", e.title); put("category", e.category.name)
                         put("username", e.username); put("password", e.password)
                         put("url", e.url); put("notes", e.notes)
@@ -52,12 +54,13 @@ object BackupManager {
             root.put("cards", JSONArray().apply {
                 VaultSession.cardDao().allOnce().forEach { c ->
                     put(JSONObject().apply {
+                        put("id", c.id)
                         put("label", c.label); put("bankName", c.bankName)
                         put("cardType", c.cardType); put("network", c.network)
                         put("productId", c.productId)
                         put("number", c.number); put("holder", c.holder)
                         put("expiry", c.expiry); put("cvv", c.cvv); put("pin", c.pin)
-                        put("serialNo", c.serialNo); put("fields", c.fieldsJson)
+                        put("fields", c.fieldsJson)
                         put("favorite", c.favorite)
                         put("createdAt", c.createdAt); put("updatedAt", c.updatedAt)
                     })
@@ -69,6 +72,7 @@ object BackupManager {
             root.put("banks", JSONArray().apply {
                 VaultSession.bankDao().allOnce().forEach { b ->
                     put(JSONObject().apply {
+                        put("id", b.id)
                         put("bankName", b.bankName); put("accountHolder", b.accountHolder)
                         put("accountNumber", b.accountNumber); put("accountType", b.accountType)
                         put("ifsc", b.ifsc); put("branch", b.branch); put("micr", b.micr)
@@ -88,6 +92,7 @@ object BackupManager {
                 val attDao = VaultSession.attachmentDao()
                 VaultSession.docDao().allOnce().forEach { d ->
                     put(JSONObject().apply {
+                        put("id", d.id)
                         put("title", d.title); put("docType", d.docType)
                         put("number", d.number); put("holder", d.holder)
                         put("notes", d.notes); put("fields", d.fieldsJson)
@@ -146,6 +151,24 @@ object BackupManager {
             })
         }
 
+        // Reminders are keyed by the *old* ids of the items they point at, so they are
+        // collected with an id map and remapped after import (see importV2).
+        if ("reminders" in categories) {
+            root.put("reminders", JSONArray().apply {
+                VaultSession.reminderDao().allOnce().forEach { r ->
+                    put(JSONObject().apply {
+                        put("title", r.title); put("reminderType", r.reminderType)
+                        put("linkedItemType", r.linkedItemType); put("linkedItemId", r.linkedItemId)
+                        put("dueAt", r.dueAt); put("completed", r.completed)
+                        put("completedAt", r.completedAt); put("recurring", r.recurring)
+                        put("recurringIntervalDays", r.recurringIntervalDays)
+                        put("notes", r.notes)
+                        put("createdAt", r.createdAt); put("updatedAt", r.updatedAt)
+                    })
+                }
+            })
+        }
+
         val json = root.toString().toByteArray()
         val salt = VaultCrypto.randomBytes(16)
         val pw = VaultCrypto.charsToBytes(backupPassword)
@@ -184,24 +207,33 @@ object BackupManager {
         }
     }
 
-    private suspend fun importV1(arr: JSONArray): Int {
+    private suspend fun importV1(arr: JSONArray): Int = importEntries(arr, null)
+
+    /**
+     * Import vault entries. When [idMap] is non-null it is filled with
+     * `original id -> new id`, which the reminder pass in [importV2] needs because
+     * inserts get fresh autoincrement ids.
+     */
+    private suspend fun importEntries(arr: JSONArray, idMap: MutableMap<Long, Long>?): Int {
         val dao = VaultSession.dao()
+        val now = System.currentTimeMillis()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            dao.upsert(
+            val newId = dao.upsert(
                 VaultEntry(
                     title = o.getString("title"),
-                    category = EntryCategory.valueOf(o.optString("category", "LOGIN")),
+                    category = entryCategoryFromName(o.optString("category")),
                     username = o.optString("username"),
                     password = o.optString("password"),
                     url = o.optString("url"),
                     notes = o.optString("notes"),
                     totpSecret = o.optString("totp"),
                     favorite = o.optBoolean("favorite"),
-                    createdAt = o.optLong("createdAt", System.currentTimeMillis()),
-                    updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
+                    createdAt = o.optLong("createdAt", now),
+                    updatedAt = o.optLong("updatedAt", now),
                 )
             )
+            idMap?.put(o.optLong("id", -1), newId)
         }
         return arr.length()
     }
@@ -210,24 +242,35 @@ object BackupManager {
         var count = 0
         val now = System.currentTimeMillis()
 
-        root.optJSONArray("entries")?.let { count += importV1(it) }
+        // Items get fresh ids on insert, so keep old->new maps per type; reminders
+        // hold a (type, id) pointer into these tables and must be remapped.
+        val entryIds = mutableMapOf<Long, Long>()
+        val linkIds = mapOf(
+            TrashType.LOGIN to entryIds,
+            TrashType.CARD to mutableMapOf<Long, Long>(),
+            TrashType.BANK to mutableMapOf<Long, Long>(),
+            TrashType.DOC to mutableMapOf<Long, Long>(),
+        )
+
+        root.optJSONArray("entries")?.let { count += importEntries(it, entryIds) }
 
         root.optJSONArray("cards")?.let { arr ->
             val dao = VaultSession.cardDao()
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                dao.upsert(CardEntry(
+                val newId = dao.upsert(CardEntry(
                     label = o.optString("label"), bankName = o.optString("bankName"),
                     cardType = o.optString("cardType", CardType.DEBIT),
                     network = o.optString("network", "AUTO"),
                     productId = o.optString("productId"),
                     number = o.optString("number"), holder = o.optString("holder"),
                     expiry = o.optString("expiry"), cvv = o.optString("cvv"),
-                    pin = o.optString("pin"), serialNo = o.optString("serialNo"),
+                    pin = o.optString("pin"),
                     fieldsJson = o.optString("fields", "[]"),
                     favorite = o.optBoolean("favorite"),
                     createdAt = o.optLong("createdAt", now), updatedAt = o.optLong("updatedAt", now),
                 ))
+                linkIds.getValue(TrashType.CARD)[o.optLong("id", -1)] = newId
                 count++
             }
         }
@@ -236,7 +279,7 @@ object BackupManager {
             val dao = VaultSession.bankDao()
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                dao.upsert(BankEntry(
+                val newId = dao.upsert(BankEntry(
                     bankName = o.optString("bankName"), accountHolder = o.optString("accountHolder"),
                     accountNumber = o.optString("accountNumber"),
                     accountType = o.optString("accountType", "SAVINGS"),
@@ -252,6 +295,7 @@ object BackupManager {
                     favorite = o.optBoolean("favorite"),
                     createdAt = o.optLong("createdAt", now), updatedAt = o.optLong("updatedAt", now),
                 ))
+                linkIds.getValue(TrashType.BANK)[o.optLong("id", -1)] = newId
                 count++
             }
         }
@@ -268,6 +312,7 @@ object BackupManager {
                     favorite = o.optBoolean("favorite"),
                     createdAt = o.optLong("createdAt", now), updatedAt = o.optLong("updatedAt", now),
                 ))
+                linkIds.getValue(TrashType.DOC)[o.optLong("id", -1)] = docId
                 count++
                 o.optJSONArray("attachments")?.let { atts ->
                     for (j in 0 until atts.length()) {
@@ -350,6 +395,32 @@ object BackupManager {
                         createdAt = o.optLong("createdAt", now), updatedAt = o.optLong("updatedAt", now),
                     ))
                 }
+            }
+        }
+
+        // Imported last: a reminder's linkedItemId points at the id the item had in
+        // the backup, which is remapped through linkIds. A reminder whose target
+        // wasn't part of a selective import keeps linkedItemId = 0 (unlinked) rather
+        // than silently pointing at an unrelated item.
+        root.optJSONArray("reminders")?.let { arr ->
+            val dao = VaultSession.reminderDao()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val oldId = o.optLong("linkedItemId")
+                val type = o.optString("linkedItemType")
+                val newId = linkIds[type]?.get(oldId) ?: 0L
+                dao.upsert(Reminder(
+                    title = o.optString("title"),
+                    reminderType = o.optString("reminderType", ReminderType.CUSTOM),
+                    linkedItemType = if (newId == 0L) "" else type,
+                    linkedItemId = newId,
+                    dueAt = o.optLong("dueAt"), completed = o.optBoolean("completed"),
+                    completedAt = o.optLong("completedAt"), recurring = o.optBoolean("recurring"),
+                    recurringIntervalDays = o.optInt("recurringIntervalDays"),
+                    notes = o.optString("notes"),
+                    createdAt = o.optLong("createdAt", now), updatedAt = o.optLong("updatedAt", now),
+                ))
+                count++
             }
         }
 

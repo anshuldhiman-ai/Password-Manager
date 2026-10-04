@@ -143,7 +143,10 @@ fun MainScreen(nav: NavController) {
                 shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(8.dp),
             ) {
-                Icon(Icons.Rounded.Add, "Quick add", tint = TextPrimary)
+                // OnAccent, not TextPrimary: this FAB is filled with Cyan, and a near-white
+                // glyph on light teal is 1.68:1 in dark theme — effectively invisible.
+                // OnAccent gives 10.46:1 dark / 4.91:1 light.
+                Icon(Icons.Rounded.Add, "Quick add", tint = OnAccent)
             }
         },
     ) { pad ->
@@ -239,7 +242,7 @@ fun MainScreen(nav: NavController) {
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = if (confirmError) Coral else Violet,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+                                unfocusedBorderColor = Stroke,
                                 cursorColor = Cyan,
                                 focusedContainerColor = Surface2.copy(alpha = 0.6f),
                                 unfocusedContainerColor = Surface2.copy(alpha = 0.3f),
@@ -600,8 +603,6 @@ private fun EntryBadge(entry: com.family.pswdmngr.data.VaultEntry) {
 @Composable
 private fun CardsHub(nav: NavController, snackbar: SnackbarHostState) {
     val cards by VaultSession.cardDao().observeAll().collectAsState(initial = emptyList())
-    val bankCards = cards.filter { it.cardType != com.family.pswdmngr.data.CardType.CSD }.size
-    val csdCards = cards.filter { it.cardType == com.family.pswdmngr.data.CardType.CSD }.size
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -619,14 +620,8 @@ private fun CardsHub(nav: NavController, snackbar: SnackbarHostState) {
             }
         } else {
             item {
-                CardHubTile("Bank cards", "$bankCards card${if (bankCards != 1) "s" else ""}",
+                CardHubTile("Bank cards", "${cards.size} card${if (cards.size != 1) "s" else ""}",
                     Icons.Rounded.CreditCard, Cyan) { nav.navigate("cards") }
-            }
-            if (csdCards > 0) {
-                item {
-                    CardHubTile("CSD Canteen cards", "$csdCards card${if (csdCards != 1) "s" else ""}",
-                        Icons.Rounded.ShoppingBag, Amber) { nav.navigate("csd") }
-                }
             }
         }
     }
@@ -743,19 +738,22 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
 
     val recentQueries = remember { mutableStateListOf<String>() }
 
+    // The accent is carried as a [ResultTint] slot, not a resolved Color: this block
+    // runs outside composable scope, so reading a theme token here would both fail to
+    // compile and (via `remember`) freeze whichever palette was current when it ran.
     val results = remember(q, entries, cards, banks, docs, notes) {
         if (q.isBlank()) emptyList()
         else buildList {
             entries.filter { it.title.contains(q, true) || it.username.contains(q, true) || it.url.contains(q, true) }
-                .forEach { add(SearchResult("Login", it.title, it.username, "entry/${it.id}", Icons.Rounded.Language, Cyan)) }
+                .forEach { add(SearchResult("Login", it.title, it.username, "entry/${it.id}", Icons.Rounded.Language, ResultTint.CYAN)) }
             cards.filter { it.label.contains(q, true) || it.bankName.contains(q, true) || it.number.contains(q, true) }
-                .forEach { add(SearchResult("Card", it.label, it.bankName, "cardDetail/${it.id}", Icons.Rounded.CreditCard, Mint)) }
+                .forEach { add(SearchResult("Card", it.label, it.bankName, "cardDetail/${it.id}", Icons.Rounded.CreditCard, ResultTint.MINT)) }
             banks.filter { it.bankName.contains(q, true) || it.accountNumber.contains(q, true) }
-                .forEach { add(SearchResult("Bank", it.bankName, it.accountNumber.takeLast(4), "bankDetail/${it.id}", Icons.Rounded.AccountBalance, Violet)) }
+                .forEach { add(SearchResult("Bank", it.bankName, it.accountNumber.takeLast(4), "bankDetail/${it.id}", Icons.Rounded.AccountBalance, ResultTint.VIOLET)) }
             docs.filter { it.title.contains(q, true) || it.number.contains(q, true) }
-                .forEach { add(SearchResult("Doc", it.title.ifBlank { com.family.pswdmngr.data.DocType.label(it.docType) }, it.number, "docDetail/${it.id}", Icons.Rounded.Description, Amber)) }
+                .forEach { add(SearchResult("Doc", it.title.ifBlank { com.family.pswdmngr.data.DocType.label(it.docType) }, it.number, "docDetail/${it.id}", Icons.Rounded.Description, ResultTint.AMBER)) }
             notes.filter { it.title.contains(q, true) || it.body.contains(q, true) }
-                .forEach { add(SearchResult("Note", it.title, "", "noteEdit/${it.id}", Icons.Rounded.StickyNote2, Coral)) }
+                .forEach { add(SearchResult("Note", it.title, "", "noteEdit/${it.id}", Icons.Rounded.StickyNote2, ResultTint.CORAL)) }
         }.take(50)
     }
 
@@ -822,6 +820,7 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
             }
             items(results.size, key = { "sr_$it" }) { i ->
                 val r = results[i]
+                val tint = resultTint(r.tint)
                 SurfaceCard(onClick = {
                     if (!recentQueries.contains(q)) {
                         recentQueries.add(0, q)
@@ -830,7 +829,7 @@ private fun UnifiedSearchTab(nav: NavController, snackbar: SnackbarHostState) {
                     nav.navigate(r.route)
                 }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(r.icon, r.color, size = 38)
+                        IconBadge(r.icon, tint, size = 38)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(r.title, color = TextPrimary, style = MaterialTheme.typography.titleMedium,
@@ -897,9 +896,22 @@ private fun SearchCategoryGrid(
     }
 }
 
+/** Theme-independent name for an accent; resolved to a Color from composable scope. */
+private enum class ResultTint { CYAN, MINT, VIOLET, AMBER, CORAL }
+
+@Composable
+@ReadOnlyComposable
+private fun resultTint(t: ResultTint): Color = when (t) {
+    ResultTint.CYAN -> Cyan
+    ResultTint.MINT -> Mint
+    ResultTint.VIOLET -> Violet
+    ResultTint.AMBER -> Amber
+    ResultTint.CORAL -> Coral
+}
+
 private data class SearchResult(
     val type: String, val title: String, val subtitle: String,
-    val route: String, val icon: ImageVector, val color: Color,
+    val route: String, val icon: ImageVector, val tint: ResultTint,
 )
 
 // ── Tab 5: More ─────────────────────────────────────────────────────────
@@ -959,7 +971,6 @@ private fun MoreTab(nav: NavController, snackbar: SnackbarHostState) {
         item { MoreTile("Bank accounts", Icons.Rounded.AccountBalance, Mint) { nav.navigate("banks") } }
         item { MoreTile("Documents", Icons.Rounded.Description, Amber) { nav.navigate("docs") } }
         item { MoreTile("Google accounts", Icons.Rounded.AccountCircle, Color(0xFF4285F4)) { nav.navigate("googleAccounts") } }
-        item { MoreTile("CSD Canteen cards", Icons.Rounded.ShoppingBag, Amber) { nav.navigate("csd") } }
 
         item { Spacer(Modifier.height(4.dp)); SectionLabel("GENERAL") }
         item { MoreTile("Settings", Icons.Rounded.Settings, TextSecondary) { nav.navigate("settings") } }

@@ -26,8 +26,15 @@ import com.family.pswdmngr.ui.screens.*
 import com.family.pswdmngr.ui.theme.*
 import kotlinx.coroutines.launch
 
-/** Keep-style tinted note cards; everything lives inside the encrypted vault. */
-val NoteTints = listOf(
+/**
+ * Keep-style tinted note cards; everything lives inside the encrypted vault.
+ *
+ * Two palettes behind one list: `NoteEntry.colorIdx` is persisted as a slot index
+ * 0..5, so both variants must stay the same length and order or saved notes would
+ * change colour. The dark values are deep enough to read light body text on; the
+ * light ones are the same hues pastelled up so dark body text stays legible.
+ */
+private val DarkNoteTints = listOf(
     Color(0xFF1E2340), // default surface
     Color(0xFF3A2A4D), // plum
     Color(0xFF1F3A3D), // teal
@@ -35,6 +42,18 @@ val NoteTints = listOf(
     Color(0xFF3D2530), // rose
     Color(0xFF25381F), // moss
 )
+
+private val LightNoteTints = listOf(
+    Color(0xFFE7EAF6), // default surface
+    Color(0xFFEDE2F5), // plum
+    Color(0xFFDDEFEF), // teal
+    Color(0xFFF3EADA), // sand
+    Color(0xFFF6E3E8), // rose
+    Color(0xFFE4EFDD), // moss
+)
+
+val NoteTints: List<Color>
+    @Composable @ReadOnlyComposable get() = if (isDarkTheme) DarkNoteTints else LightNoteTints
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,7 +209,7 @@ fun EditNoteScreen(nav: NavController, id: Long) {
                             .background(tint)
                             .then(
                                 if (i == colorIdx) Modifier.border(2.dp, Cyan, CircleShape)
-                                else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                                else Modifier.border(1.dp, Stroke, CircleShape)
                             )
                             .clickable { colorIdx = i },
                     )

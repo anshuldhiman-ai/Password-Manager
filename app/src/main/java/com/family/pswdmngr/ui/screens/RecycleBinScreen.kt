@@ -158,13 +158,17 @@ private fun trashIcon(type: String): ImageVector = when (type) {
     TrashType.DOC -> Icons.Rounded.Description
     TrashType.NOTE -> Icons.Rounded.StickyNote2
     TrashType.TASK -> Icons.Rounded.TaskAlt
+    TrashType.REMINDER -> Icons.Rounded.NotificationsActive
     else -> Icons.Rounded.Help
 }
 
+@Composable
+@ReadOnlyComposable
 private fun trashColor(type: String): Color = when (type) {
     TrashType.LOGIN -> Violet; TrashType.CARD -> Cyan
     TrashType.BANK -> Mint; TrashType.DOC -> Amber
     TrashType.NOTE -> Coral; TrashType.TASK -> Violet
+    TrashType.REMINDER -> Amber
     else -> TextSecondary
 }
 

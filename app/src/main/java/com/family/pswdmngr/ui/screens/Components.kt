@@ -196,15 +196,19 @@ fun FilterChipRow(
 }
 
 fun categoryIcon(c: EntryCategory): ImageVector = when (c) {
-    EntryCategory.LOGIN -> Icons.Rounded.Language
+    EntryCategory.WEBSITE_APP -> Icons.Rounded.Language
+    EntryCategory.BANK -> Icons.Rounded.AccountBalance
     EntryCategory.CARD -> Icons.Rounded.CreditCard
     EntryCategory.NOTE -> Icons.Rounded.StickyNote2
     EntryCategory.IDENTITY -> Icons.Rounded.Badge
     EntryCategory.WIFI -> Icons.Rounded.Wifi
 }
 
+@Composable
+@ReadOnlyComposable
 fun categoryColor(c: EntryCategory): Color = when (c) {
-    EntryCategory.LOGIN -> Violet
+    EntryCategory.WEBSITE_APP -> Violet
+    EntryCategory.BANK -> Mint
     EntryCategory.CARD -> Cyan
     EntryCategory.NOTE -> Amber
     EntryCategory.IDENTITY -> Mint
@@ -360,7 +364,7 @@ fun VaultTextField(
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Cyan,
-            unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
+            unfocusedBorderColor = Stroke,
             focusedLabelColor = Cyan,
             unfocusedLabelColor = TextSecondary,
             cursorColor = Cyan,

@@ -145,7 +145,7 @@ fun ForgotPasswordScreen(nav: NavController) {
                                 fontFamily = FontFamily.Monospace, letterSpacing = 2.sp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Amber,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+                                unfocusedBorderColor = Stroke,
                                 cursorColor = Amber,
                                 focusedContainerColor = Surface2.copy(alpha = 0.6f),
                                 unfocusedContainerColor = Surface2.copy(alpha = 0.3f),

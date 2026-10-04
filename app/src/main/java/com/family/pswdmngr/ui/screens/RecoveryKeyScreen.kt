@@ -233,7 +233,7 @@ fun RecoveryKeyScreen(nav: NavController) {
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = if (confirmError) Coral else Violet,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+                                unfocusedBorderColor = Stroke,
                                 cursorColor = Cyan,
                                 focusedContainerColor = Surface2.copy(alpha = 0.6f),
                                 unfocusedContainerColor = Surface2.copy(alpha = 0.3f),

@@ -411,7 +411,6 @@ fun CardFace(
     val ink = if (light) Color(0xFF17233B) else Color.White
     val inkSoft = ink.copy(alpha = if (light) 0.55f else 0.55f)
     val network = CardNetwork.resolve(card)
-    val isCsd = card.cardType == CardType.CSD
     // Official artwork already carries the bank logo, product name, chip and
     // contactless glyph — so we only overlay the dynamic data on top of it.
     val hasArt = product?.artworkRes != null
@@ -456,14 +455,13 @@ fun CardFace(
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             if (!hasArt) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    if (bankKey != null && !isCsd) {
+                    if (bankKey != null) {
                         BankLogo(bankKey, size = 24.dp, onLight = light)
                         Spacer(Modifier.width(8.dp))
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
                             when {
-                                isCsd -> "CSD CANTEEN SMART CARD"
                                 bankKey != null -> CardCatalog.bankDisplay(bankKey).uppercase()
                                 else -> card.bankName.uppercase().ifBlank { "BANK" }
                             },
@@ -531,15 +529,6 @@ fun CardFace(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Row {
-                        if (isCsd && card.serialNo.isNotBlank()) {
-                            Column {
-                                Text("SERIAL NO", color = inkSoft, fontFamily = DisplayFamily,
-                                    fontSize = 7.sp, letterSpacing = 1.sp)
-                                Text(card.serialNo, color = ink, fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace)
-                            }
-                            Spacer(Modifier.width(16.dp))
-                        }
                         if (card.expiry.isNotBlank()) {
                             Column {
                                 Text("VALID THRU", color = if (hasArt) overlayInk.copy(alpha = 0.7f) else inkSoft,
@@ -561,10 +550,7 @@ fun CardFace(
                     )
                 }
                 // Network mark is baked into official artwork, so only draw it on generic faces
-                if (isCsd) {
-                    Text("CSD", color = Color(0xFFC9B458), fontFamily = DisplayFamily,
-                        fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
-                } else if (!hasArt) {
+                if (!hasArt) {
                     NetworkMark(network, onLight = light)
                 }
             }

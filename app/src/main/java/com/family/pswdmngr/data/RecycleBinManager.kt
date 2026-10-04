@@ -26,6 +26,7 @@ object RecycleBinManager {
             is DocumentEntry -> listOf(TrashType.DOC, item.id, item.title.ifBlank { DocType.label(item.docType) }, item.toTrashJson())
             is NoteEntry -> listOf(TrashType.NOTE, item.id, item.title, item.toTrashJson())
             is TaskItem -> listOf(TrashType.TASK, item.id, item.title, item.toTrashJson())
+            is Reminder -> listOf(TrashType.REMINDER, item.id, item.title, item.toTrashJson())
             else -> return
         }
 
@@ -49,6 +50,7 @@ object RecycleBinManager {
             is DocumentEntry -> VaultSession.docDao().delete(item)
             is NoteEntry -> VaultSession.noteDao().delete(item)
             is TaskItem -> VaultSession.taskDao().deleteTask(item)
+            is Reminder -> VaultSession.reminderDao().delete(item)
         }
     }
 
@@ -59,6 +61,7 @@ object RecycleBinManager {
             TrashType.CARD -> VaultSession.cardDao().byId(originalId)?.let { VaultSession.cardDao().delete(it) }
             TrashType.BANK -> VaultSession.bankDao().byId(originalId)?.let { VaultSession.bankDao().delete(it) }
             TrashType.DOC -> VaultSession.docDao().byId(originalId)?.let { VaultSession.docDao().delete(it) }
+            // NOTE and TASK have no byId, so they are only ever removed via deleteOriginal(item).
         }
     }
 
@@ -71,6 +74,7 @@ object RecycleBinManager {
             TrashType.DOC -> VaultSession.docDao().upsert(documentEntryFromJson(trashItem.dataJson).copy(id = 0))
             TrashType.NOTE -> VaultSession.noteDao().upsert(noteEntryFromJson(trashItem.dataJson).copy(id = 0))
             TrashType.TASK -> VaultSession.taskDao().upsertTask(taskItemFromJson(trashItem.dataJson).copy(id = 0))
+            TrashType.REMINDER -> VaultSession.reminderDao().upsert(reminderFromJson(trashItem.dataJson).copy(id = 0))
         }
         deleteOriginalById(trashItem.itemType, trashItem.originalId)
         VaultSession.trashDao().delete(trashItem)

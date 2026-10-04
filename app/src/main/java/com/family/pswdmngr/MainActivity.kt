@@ -22,6 +22,7 @@ import com.family.pswdmngr.ui.notes.*
 import com.family.pswdmngr.ui.screens.*
 import com.family.pswdmngr.ui.tasks.TasksScreen
 import com.family.pswdmngr.ui.theme.PswdMngrTheme
+import com.family.pswdmngr.ui.theme.ThemePrefs
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,6 +34,11 @@ class MainActivity : FragmentActivity() {
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
         )
+
+        // Loaded before the first composition so the opening frame already uses the saved
+        // mode — reading it inside setContent would render one dark frame first when the
+        // user has forced light on a dark system theme.
+        ThemePrefs.load(this)
 
         setContent {
             PswdMngrTheme {
@@ -77,7 +83,6 @@ class MainActivity : FragmentActivity() {
                     }
                     composable("generator") { GeneratorScreen(nav) }
                     composable("settings") { SettingsScreen(nav) }
-                    composable("sbiRewardz") { SbiRewardzScreen(nav) }
                     composable("googleAccounts") { GoogleAccountsScreen(nav) }
                     composable("googleEdit/{id}") { back -> GoogleAccountEditor(nav, back.arguments?.getString("id")?.toLongOrNull() ?: -1L) }
 
@@ -90,10 +95,6 @@ class MainActivity : FragmentActivity() {
                         EditCardScreen(nav, back.arguments?.getString("id")?.toLongOrNull() ?: -1L)
                     }
                     composable("cardScan") { CardScannerScreen(nav) }
-                    composable("csd") { CsdCardsScreen(nav) }
-                    composable("csdEdit/{id}") { back ->
-                        EditCardScreen(nav, back.arguments?.getString("id")?.toLongOrNull() ?: -1L, "CSD")
-                    }
                     composable("banks") { BanksScreen(nav) }
                     composable("bankDetail/{id}") { back ->
                         BankDetailScreen(nav, back.arguments?.getString("id")?.toLongOrNull() ?: -1L)

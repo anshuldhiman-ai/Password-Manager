@@ -121,7 +121,12 @@ fun Argon2idBenchmarkScreen(nav: NavController) {
             Button(
                 onClick = { benchmark() },
                 enabled = !running,
-                colors = ButtonDefaults.buttonColors(containerColor = Violet),
+                // Default contentColor would be TextPrimary (near-white on violet = 3.97:1
+                // dark / 2.89:1 light). OnAccent is the token meant for filled accents.
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Violet,
+                    contentColor = OnAccent,
+                ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(

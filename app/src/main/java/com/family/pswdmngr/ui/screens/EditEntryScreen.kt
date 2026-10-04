@@ -34,7 +34,7 @@ fun EditEntryScreen(nav: NavController, id: Long) {
     var loaded by remember { mutableStateOf(isNew) }
     var original by remember { mutableStateOf<VaultEntry?>(null) }
     var title by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(EntryCategory.LOGIN) }
+    var category by remember { mutableStateOf(EntryCategory.WEBSITE_APP) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }

@@ -59,12 +59,6 @@ import kotlinx.coroutines.withContext
 fun UnlockScreen(nav: NavController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var password by remember { mutableStateOf("") }
-    var showPw by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var working by remember { mutableStateOf(false) }
-    var unlocking by remember { mutableStateOf(false) } // success exit animation
-    var showPasswordForm by remember { mutableStateOf(isRooted || !bioAvailable) }
 
     // --- Root / tamper state ---
     val isRooted = remember { RootDetector.isRooted(ctx) }
@@ -83,6 +77,13 @@ fun UnlockScreen(nav: NavController) {
                 .canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
         )
     }
+
+    var password by remember { mutableStateOf("") }
+    var showPw by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    var unlocking by remember { mutableStateOf(false) } // success exit animation
+    var showPasswordForm by remember { mutableStateOf(isRooted || !bioAvailable) }
 
     // --- Lockout (exponential backoff, persistent across screen restarts) ---
     var failCount by remember { mutableStateOf(LockoutTracker.failCount(ctx)) }

@@ -106,6 +106,7 @@ object VaultSession {
     fun noteDao(): NoteDao = requireDb().noteDao()
     fun taskDao(): TaskDao = requireDb().taskDao()
     fun trashDao(): TrashDao = requireDb().trashDao()
+    fun reminderDao(): ReminderDao = requireDb().reminderDao()
 
     private fun requireDb(): VaultDatabase = db ?: error("Vault locked")
 
@@ -470,7 +471,7 @@ object VaultSession {
         val factory = SupportFactory(secureKey.copyOf(), null, false)
         db = Room.databaseBuilder(ctx.applicationContext, VaultDatabase::class.java, "vault.db")
             .openHelperFactory(factory)
-            .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4)
+            .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4, VaultDatabase.MIGRATION_4_5)
             .build()
         vaultKey = secureKey
     }

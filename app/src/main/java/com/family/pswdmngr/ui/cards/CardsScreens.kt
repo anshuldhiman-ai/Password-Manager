@@ -36,8 +36,7 @@ import kotlinx.coroutines.launch
 fun CardsScreen(nav: NavController) {
     if (!VaultSession.isUnlocked) return
     val cards by VaultSession.cardDao().observeAll().collectAsState(initial = emptyList())
-    val grouped = cards.filter { it.cardType != CardType.CSD }
-        .groupBy { it.bankName.trim().ifBlank { "Bank card" } }
+    val grouped = cards.groupBy { it.bankName.trim().ifBlank { "Bank card" } }
 
     Scaffold(
         containerColor = Midnight,
@@ -204,7 +203,6 @@ fun CardDetailScreen(nav: NavController, id: Long) {
             if (c.pin.isNotBlank()) item {
                 RevealLockField("ATM PIN", c.pin, mono = true) { copy("PIN", c.pin) }
             }
-            if (c.serialNo.isNotBlank()) item { SecretRow("Serial no", c.serialNo, mono = true) { copy("Serial no", c.serialNo) } }
 
             val extras = parseFields(c.fieldsJson)
             if (extras.isNotEmpty()) {
@@ -310,14 +308,9 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
     var expiry by remember { mutableStateOf("") }
     var cvv by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
-    var serialNo by remember { mutableStateOf("") }
     var fields by remember { mutableStateOf(listOf<CustomField>()) }
     var original by remember { mutableStateOf<CardEntry?>(null) }
     var showExpiryPicker by remember { mutableStateOf(false) }
-
-    LaunchedEffect(fixedType) {
-        if (fixedType == CardType.CSD && id == -1L) bankName = "CSD Canteen"
-    }
 
     LaunchedEffect(id) {
         if (id != -1L) {
@@ -327,7 +320,7 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
                 network = c.network; productId = c.productId
                 number = c.number.filter { it.isDigit() }.chunked(4).joinToString(" ")
                 holder = c.holder
-                expiry = c.expiry; cvv = c.cvv; pin = c.pin; serialNo = c.serialNo
+                expiry = c.expiry; cvv = c.cvv; pin = c.pin
                 fields = parseFields(c.fieldsJson)
             }
             loaded = true
@@ -356,7 +349,7 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
         }
     }
 
-    // Save handler shared between the tick mark and CSD flow
+    // Save handler
     fun saveCard() {
         scope.launch {
             val now = System.currentTimeMillis()
@@ -367,7 +360,7 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
                     cardType = cardType, network = network, productId = productId,
                     number = number.filter { it.isDigit() },
                     holder = holder.trim().uppercase(), expiry = expiry, cvv = cvv,
-                    pin = pin, serialNo = serialNo.trim(),
+                    pin = pin,
                     fieldsJson = fieldsToJson(fields.filter { it.label.isNotBlank() }),
                     updatedAt = now, createdAt = original?.createdAt ?: now,
                 )
@@ -384,7 +377,6 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
     val preview = CardEntry(
         label = label, bankName = bankName, cardType = cardType, network = network,
         productId = productId, number = number, holder = holder, expiry = expiry,
-        serialNo = serialNo,
     )
 
     Scaffold(
@@ -392,8 +384,7 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
         topBar = {
             TopAppBar(
                 title = { Text(
-                    if (fixedType == CardType.CSD) if (id == -1L) "Add CSD card" else "Edit CSD card"
-                    else if (id == -1L) "Add card" else "Edit card",
+                    if (id == -1L) "Add card" else "Edit card",
                     color = TextPrimary,
                 ) },
                 navigationIcon = {
@@ -402,21 +393,17 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
                     }
                 },
                 actions = {
-                    if (fixedType != CardType.CSD) {
-                        IconButton(onClick = { nav.navigate("cardScan") }) {
-                            Icon(Icons.Rounded.PhotoCamera, "Scan card", tint = Cyan)
-                        }
+                    IconButton(onClick = { nav.navigate("cardScan") }) {
+                        Icon(Icons.Rounded.PhotoCamera, "Scan card", tint = Cyan)
                     }
                     IconButton(
                         onClick = { saveCard() },
-                        enabled = number.isNotBlank() ||
-                            (fixedType == CardType.CSD && serialNo.isNotBlank()),
+                        enabled = number.isNotBlank(),
                     ) {
                         Icon(
                             Icons.Rounded.CheckCircle,
                             "Save",
-                            tint = if (number.isNotBlank() || (fixedType == CardType.CSD && serialNo.isNotBlank()))
-                                Mint else TextSecondary,
+                            tint = if (number.isNotBlank()) Mint else TextSecondary,
                         )
                     }
                 },
@@ -585,20 +572,6 @@ fun EditCardScreen(nav: NavController, id: Long, fixedType: String? = null) {
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
                     )
-                }
-            }
-            item {
-                if (fixedType == CardType.CSD) {
-                    // CSD-only fields: serial number lives here, never in the bank-card editor
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        VaultTextField(
-                            pin, { pin = it.filter { ch -> ch.isDigit() }.take(6) },
-                            "PIN", modifier = Modifier.weight(1f),
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                        )
-                        VaultTextField(serialNo, { serialNo = it }, "Serial no", modifier = Modifier.weight(1f))
-                    }
                 }
             }
         }

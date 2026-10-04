@@ -216,6 +216,10 @@ fun TasksScreen(nav: NavController) {
                     dao.upsertTask(t.copy(starred = !t.starred, updatedAt = System.currentTimeMillis()))
                 }
 
+                // Resolved here, not at the `section(...)` call below: that local fun lives
+                // inside the LazyListScope lambda, which is not composable scope.
+                val overdueTint = Coral
+
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -232,7 +236,7 @@ fun TasksScreen(nav: NavController) {
                                 onClick = { t -> editorTask = t; showEditor = true })
                         }
                     }
-                    section("Overdue", overdue, Coral)
+                    section("Overdue", overdue, overdueTint)
                     section("Today", todayTasks)
                     section("Upcoming", upcoming)
                     section("No due date", noDate)
