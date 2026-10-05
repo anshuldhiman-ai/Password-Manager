@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
@@ -189,12 +190,68 @@ fun UnlockScreen(nav: NavController) {
     val exitAlpha by animateFloatAsState(
         if (unlocking) 0f else 1f, tween(260), label = "exitAlpha")
 
+    // Live clock for Lock Screen header per sample.jpg
+    var currentTime by remember { mutableStateOf(java.time.LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = java.time.LocalDateTime.now()
+            delay(1000)
+        }
+    }
+    val dateText = remember(currentTime.dayOfYear) {
+        currentTime.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d"))
+    }
+    val timeText = remember(currentTime.minute) {
+        currentTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
+    fun submitPasswordUnlock() {
+        if (password.isNotEmpty() && lockoutMs <= 0 && !working) {
+            working = true
+            scope.launch {
+                val ok = withContext(Dispatchers.Default) {
+                    VaultSession.unlock(ctx, password.toCharArray())
+                }
+                working = false
+                if (ok) {
+                    unlockOk()
+                } else {
+                    password = ""
+                    error = "Wrong master password"
+                    handleAutoWipe()
+                }
+            }
+        }
+    }
+
     AuthScrollColumn(
         modifier = Modifier
             .background(HeroGradient)
             .graphicsLayer { scaleX = exitScale; scaleY = exitScale; alpha = exitAlpha },
     ) {
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // --- Live Date & Time per sample.jpg Lock Screen ---
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.alpha(contentAlpha)
+        ) {
+            Text(
+                dateText,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextSecondary,
+            )
+            Text(
+                timeText,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                ),
+                color = TextPrimary,
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
 
         // --- Security warning banners ---
         if (showSecurityWarnings) {
@@ -218,29 +275,28 @@ fun UnlockScreen(nav: NavController) {
             Spacer(Modifier.height(16.dp))
         }
 
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                Modifier
-                    .size(130.dp)
-                    .scale(glow)
-                    .clip(CircleShape)
-                    .background(GlowCyan),
-            )
-            Box(Modifier.scale(logoScale)) {
-                IconBadge(Icons.Rounded.Shield, Cyan, size = 88)
-            }
-        }
+        // --- Squircle App Logo with glow per sample.jpg ---
+        AppLogoBadge(size = 84.dp, glow = glow)
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
         Column(
             Modifier.alpha(contentAlpha),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Welcome back", style = MaterialTheme.typography.displaySmall, color = TextPrimary)
-            Spacer(Modifier.height(8.dp))
             Text(
-                "Unlock your vault to continue",
-                color = TextSecondary, textAlign = TextAlign.Center,
+                "Vault Locked",
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                color = TextPrimary
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (showPasswordForm || !bioAvailable || isRooted)
+                    "Enter your master password to unlock"
+                else
+                    "Use your fingerprint to unlock",
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
             )
             if (failCount > 0 && lockoutMs == 0L) {
                 Spacer(Modifier.height(6.dp))
@@ -251,7 +307,7 @@ fun UnlockScreen(nav: NavController) {
             }
         }
 
-        Spacer(Modifier.height(if (showPasswordForm) 24.dp else 40.dp))
+        Spacer(Modifier.height(if (showPasswordForm || !bioAvailable || isRooted) 20.dp else 36.dp))
 
         if (showPasswordForm || !bioAvailable || isRooted) {
             if (isRooted) {
@@ -267,11 +323,15 @@ fun UnlockScreen(nav: NavController) {
                 VaultTextField(
                     value = password,
                     onValueChange = { password = it; error = null },
-                    enabled = lockoutMs <= 0,
+                    enabled = lockoutMs <= 0 && !working,
                     label = "Master password",
                     modifier = Modifier.focusRequester(passwordFocus),
+                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = Cyan) },
                     visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { submitPasswordUnlock() }
+                    ),
                     trailingIcon = {
                         IconButton(onClick = { showPw = !showPw }) {
                             Icon(
@@ -294,22 +354,56 @@ fun UnlockScreen(nav: NavController) {
                 }
             }
         } else if (bioAvailable && lockoutMs <= 0) {
+            // Glowing circular biometric button per sample.jpg
             Column(
                 Modifier.alpha(contentAlpha),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                IconButton(
-                    onClick = { biometricUnlock() },
-                    modifier = Modifier.size(80.dp),
-                ) {
-                    Icon(Icons.Rounded.Fingerprint, "Biometric unlock", tint = Cyan, modifier = Modifier.size(56.dp))
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(112.dp)
+                            .scale(glow)
+                            .clip(CircleShape)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.radialGradient(
+                                    listOf(Cyan.copy(alpha = 0.25f), Violet.copy(alpha = 0.15f), androidx.compose.ui.graphics.Color.Transparent)
+                                )
+                            )
+                    )
+                    Surface(
+                        onClick = { biometricUnlock() },
+                        modifier = Modifier.size(96.dp),
+                        shape = CircleShape,
+                        color = Surface2,
+                        border = androidx.compose.foundation.BorderStroke(
+                            2.dp,
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(Cyan, Violet)
+                            )
+                        ),
+                        shadowElevation = 10.dp,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Fingerprint,
+                                "Biometric unlock",
+                                tint = Cyan,
+                                modifier = Modifier.size(54.dp)
+                            )
+                        }
+                    }
                 }
-                Text("Touch to unlock", color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Touch sensor to unlock",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
 
-        // Fixed spacer, not weight(1f) — see AuthScrollColumn.
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(28.dp))
 
         if (working) {
             CircularProgressIndicator(color = Cyan)
@@ -321,25 +415,13 @@ fun UnlockScreen(nav: NavController) {
                     AccentButton(
                         when {
                             lockoutMs > 0 -> "Wait ${LockoutTracker.remainingLabel(ctx)}"
-                            else -> "Unlock"
+                            else -> "Unlock Vault"
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = password.isNotEmpty() && lockoutMs <= 0,
+                        icon = Icons.Rounded.LockOpen,
                     ) {
-                        working = true
-                        scope.launch {
-                            val ok = withContext(Dispatchers.Default) {
-                                VaultSession.unlock(ctx, password.toCharArray())
-                            }
-                            working = false
-                            if (ok) {
-                                unlockOk()
-                            } else {
-                                password = ""
-                                error = "Wrong password"
-                                handleAutoWipe()
-                            }
-                        }
+                        submitPasswordUnlock()
                     }
                 }
 
@@ -353,7 +435,7 @@ fun UnlockScreen(nav: NavController) {
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            if (showPasswordForm) "Use biometric instead" else "Use master password",
+                            if (showPasswordForm) "Use fingerprint instead" else "Enter Master Password",
                             color = Cyan,
                             style = MaterialTheme.typography.bodyMedium,
                         )

@@ -11,6 +11,7 @@ captures/
 *.apk
 *.aab
 *.ap_
+archived_apks/
 
 # ── Secrets (never commit) ────────────────────────────────────
 keystore.properties

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -342,22 +343,14 @@ fun Modifier.animatedListItem(index: Int): Modifier {
  * Scrollable full-screen container for the auth screens (onboarding, unlock,
  * recovery key, forgot password).
  *
- * These screens are taller than a phone viewport — onboarding alone is ~900dp —
- * and a plain `fillMaxSize()` Column does **not** scroll: children past the
- * bottom edge are laid out outside the parent's bounds and are both invisible
- * and untouchable (the confirm-password field could not be scrolled to *or*
- * tapped). Wrapping in [verticalScroll] makes the whole screen reachable, which
- * also rescues it from large system font scales.
- *
- * [imePadding] keeps the focused field above the keyboard — the platform
- * pan-and-resize path (adjustResize) is deliberately not relied on because the
- * edge-to-edge window ignores window insets.
+ * Automatically handles IME (software keyboard) and system bars insets so input
+ * fields and action buttons are never obscured or pushed outside the viewport.
  */
 @Composable
 fun AuthScrollColumn(
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
-    padding: PaddingValues = PaddingValues(28.dp),
+    padding: PaddingValues = PaddingValues(24.dp),
     horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     content: @Composable ColumnScope.() -> Unit,
@@ -365,6 +358,8 @@ fun AuthScrollColumn(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .systemBarsPadding()
+            .imePadding()
             .verticalScroll(scrollState)
             .padding(padding),
         horizontalAlignment = horizontalAlignment,
@@ -374,11 +369,74 @@ fun AuthScrollColumn(
 }
 
 /**
- * Password strength meter — a tinted bar plus a one-word verdict.
- *
- * "Too weak" is purely advisory: the strength *gate* stays in the caller
- * (`enabled = strong && match`), because a hard 60-bit threshold is a security
- * policy rather than a presentation choice. This composable only reports.
+ * App Logo Badge matching sample.jpg design.
+ * Features a glowing squircle with high-contrast PSWD MNGR branding.
+ */
+@Composable
+fun AppLogoBadge(
+    modifier: Modifier = Modifier,
+    size: Dp = 84.dp,
+    glow: Float = 1f,
+) {
+    Box(contentAlignment = Alignment.Center, modifier = modifier) {
+        Box(
+            Modifier
+                .size(size * 1.35f)
+                .scale(glow)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Cyan.copy(alpha = 0.28f), Violet.copy(alpha = 0.14f), Color.Transparent)
+                    )
+                )
+        )
+        Surface(
+            modifier = Modifier.size(size),
+            shape = RoundedCornerShape(size * 0.28f),
+            color = Surface2,
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                Brush.linearGradient(listOf(Cyan.copy(alpha = 0.7f), Violet.copy(alpha = 0.5f)))
+            ),
+            shadowElevation = 8.dp,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF1E2538), Color(0xFF101424))
+                        )
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "PSWD",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                            letterSpacing = 2.sp,
+                            fontSize = (size.value * 0.22f).sp,
+                        ),
+                        color = Color.White,
+                    )
+                    Text(
+                        "MNGR",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                            fontSize = (size.value * 0.16f).sp,
+                        ),
+                        color = Cyan,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Password strength meter — a tinted bar plus a clear status message.
  */
 @Composable
 fun PasswordStrengthMeter(
@@ -387,25 +445,39 @@ fun PasswordStrengthMeter(
 ) {
     val entropy = PasswordGenerator.entropy(password)
     val meterColor = when {
+        password.isEmpty() -> TextSecondary
+        password.length < 8 -> Coral
         entropy >= 60 -> Mint
-        entropy >= 40 -> Amber
-        else -> Coral
+        entropy >= 40 -> Cyan
+        else -> Amber
     }
-    Column(modifier.fillMaxWidth()) {
+    val meterFraction = when {
+        password.isEmpty() -> 0f
+        password.length < 8 -> 0.25f
+        entropy >= 60 -> 1.0f
+        entropy >= 40 -> 0.70f
+        else -> 0.45f
+    }
+    val label = when {
+        password.isEmpty() -> "Must be at least 8 characters"
+        password.length < 8 -> "Too short — minimum 8 characters (${password.length}/8)"
+        entropy >= 60 -> "Very strong password"
+        entropy >= 40 -> "Good password"
+        else -> "Fair — add numbers or symbols for more security"
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
         LinearProgressIndicator(
-            progress = { (entropy / 100.0).toFloat().coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp),
+            progress = { meterFraction },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
             color = meterColor,
             trackColor = Surface2,
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            when {
-                password.isEmpty() -> " "
-                entropy >= 60 -> "Strong"
-                entropy >= 40 -> "Okay — longer is better"
-                else -> "Too weak"
-            },
+            label,
             style = MaterialTheme.typography.labelMedium,
             color = meterColor,
             modifier = Modifier.align(Alignment.Start),
@@ -413,8 +485,8 @@ fun PasswordStrengthMeter(
     }
 }
 
-/** True when [password] clears the 60-bit minimum enforced at account creation. */
-fun isPasswordStrong(password: String): Boolean = PasswordGenerator.entropy(password) >= 60
+/** True when [password] is at least 8 characters (standard for vault master passwords). */
+fun isPasswordStrong(password: String): Boolean = password.length >= 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -426,11 +498,14 @@ fun VaultTextField(
     enabled: Boolean = true,
     singleLine: Boolean = true,
     readOnly: Boolean = false,
+    leadingIcon: @Composable (() -> Unit)? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
         androidx.compose.ui.text.input.VisualTransformation.None,
     keyboardOptions: androidx.compose.foundation.text.KeyboardOptions =
         androidx.compose.foundation.text.KeyboardOptions.Default,
-    trailingIcon: @Composable (() -> Unit)? = null,
+    keyboardActions: androidx.compose.foundation.text.KeyboardActions =
+        androidx.compose.foundation.text.KeyboardActions.Default,
 ) {
     OutlinedTextField(
         value = value,
@@ -440,9 +515,11 @@ fun VaultTextField(
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
         readOnly = readOnly,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
-        trailingIcon = trailingIcon,
+        keyboardActions = keyboardActions,
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Cyan,
@@ -455,3 +532,4 @@ fun VaultTextField(
         ),
     )
 }
+

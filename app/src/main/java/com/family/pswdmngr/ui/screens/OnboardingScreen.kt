@@ -3,6 +3,7 @@ package com.family.pswdmngr.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -34,81 +35,78 @@ fun OnboardingScreen(nav: NavController) {
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var showPw by remember { mutableStateOf(false) }
+    var showConfirmPw by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
 
     val passwordFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
 
-    val strong = isPasswordStrong(password) // ~12+ mixed chars
+    val validLength = password.length >= 8
     val match = password == confirm && password.isNotEmpty()
+    val canProceed = validLength && match && !working
 
     AuthScrollColumn(
         modifier = Modifier.background(HeroGradient),
     ) {
-        // The decorative hero shrinks on short viewports so the form itself
-        // still clears the fold on a 5" screen instead of burying the fields.
-        Spacer(Modifier.height(24.dp))
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                Modifier.size(120.dp).clip(CircleShape)
-                    .background(GlowCyan),
-            )
-            IconBadge(Icons.Rounded.Shield, Cyan, size = 84)
-        }
-        Spacer(Modifier.height(24.dp))
-        Text("Welcome", style = MaterialTheme.typography.displaySmall, color = TextPrimary)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
+        
+        AppLogoBadge(size = 80.dp)
+
+        Spacer(Modifier.height(18.dp))
         Text(
-            "Your passwords, cards, and notes — fully offline and encrypted.",
+            "Create Master Password",
+            style = MaterialTheme.typography.headlineSmall,
+            color = TextPrimary,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Set your master password to encrypt your vault.\n100% offline & zero-knowledge security.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(28.dp))
+        
+        Spacer(Modifier.height(24.dp))
 
-        val features = listOf(
-            Icons.Rounded.WifiOff to "100% Offline — no network ever",
-            Icons.Rounded.Lock to "End-to-end encrypted vault",
-            Icons.Rounded.Fingerprint to "Biometric quick unlock",
-            Icons.Rounded.Backup to "Encrypted backup & restore",
-        )
-        features.forEach { (icon, text) ->
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        // Security reassurance chips
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Surface2.copy(alpha = 0.6f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Stroke),
             ) {
-                Box(
-                    Modifier.size(36.dp).clip(CircleShape)
-                        .background(Cyan.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(icon, null, tint = Cyan, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.WifiOff, null, tint = Cyan, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("100% Offline", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
+                    Spacer(Modifier.width(10.dp))
+                    Icon(Icons.Rounded.Lock, null, tint = Mint, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Argon2id + AES", style = MaterialTheme.typography.labelSmall, color = TextPrimary)
                 }
-                Spacer(Modifier.width(14.dp))
-                Text(text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
             }
         }
 
-        Spacer(Modifier.height(28.dp))
-        Text("Create master password", style = MaterialTheme.typography.titleMedium, color = TextPrimary,
-            modifier = Modifier.align(Alignment.Start))
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "One password protects everything. It is never stored — write it down and keep it safe.",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
-            textAlign = TextAlign.Start,
-            modifier = Modifier.align(Alignment.Start),
-        )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
 
         VaultTextField(
             value = password,
             onValueChange = { password = it },
             label = "Master password",
             modifier = Modifier.focusRequester(passwordFocus),
+            leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = Cyan) },
             visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onNext = { confirmFocus.requestFocus() }
+            ),
             trailingIcon = {
                 IconButton(onClick = { showPw = !showPw }) {
                     Icon(
@@ -118,38 +116,71 @@ fun OnboardingScreen(nav: NavController) {
                 }
             },
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         PasswordStrengthMeter(password)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
         VaultTextField(
             value = confirm,
             onValueChange = { confirm = it },
-            label = "Confirm password",
+            label = "Confirm master password",
             modifier = Modifier.focusRequester(confirmFocus),
-            visualTransformation = PasswordVisualTransformation(),
+            leadingIcon = { 
+                Icon(
+                    if (match) Icons.Rounded.CheckCircle else Icons.Rounded.Key,
+                    null,
+                    tint = if (match) Mint else Cyan,
+                ) 
+            },
+            visualTransformation = if (showConfirmPw) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = {
+                    if (canProceed) {
+                        working = true
+                        scope.launch {
+                            val recoveryKey = withContext(Dispatchers.Default) {
+                                VaultSession.create(ctx, password.toCharArray())
+                            }
+                            VaultSession.pendingRecoveryKey = recoveryKey
+                            nav.navigate("recoveryKey") { popUpTo(0) { inclusive = true } }
+                        }
+                    }
+                }
+            ),
+            trailingIcon = {
+                IconButton(onClick = { showConfirmPw = !showConfirmPw }) {
+                    Icon(
+                        if (showConfirmPw) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        null, tint = TextSecondary
+                    )
+                }
+            },
         )
-        if (confirm.isNotEmpty() && !match) {
-            Spacer(Modifier.height(4.dp))
-            Text("Passwords don't match", color = Coral, style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.align(Alignment.Start))
+        
+        if (confirm.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            if (match) {
+                Text("✓ Passwords match", color = Mint, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.align(Alignment.Start))
+            } else {
+                Text("Passwords do not match", color = Coral, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.align(Alignment.Start))
+            }
         }
 
-        // Fixed spacer, not weight(1f): weight is illegal under the unbounded
-        // max-height constraint a verticalScroll column imposes (it throws at
-        // measure time), which is the trap that made this screen unscrollable.
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
         if (working) {
             CircularProgressIndicator(color = Cyan)
             Spacer(Modifier.height(8.dp))
             Text("Deriving encryption key…", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
         } else {
             AccentButton(
-                "Get started",
+                "Create Vault",
                 modifier = Modifier.fillMaxWidth(),
-                enabled = strong && match,
+                enabled = canProceed,
+                icon = Icons.Rounded.LockOpen,
             ) {
                 working = true
                 scope.launch {
@@ -161,6 +192,6 @@ fun OnboardingScreen(nav: NavController) {
                 }
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
     }
 }
