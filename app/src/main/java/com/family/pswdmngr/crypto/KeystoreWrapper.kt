@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -19,27 +17,23 @@ import javax.crypto.spec.GCMParameterSpec
  */
 class KeystoreWrapper(context: Context) {
 
-    private val prefs: SharedPreferences = run {
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        EncryptedSharedPreferences.create(
-            "biometric_wrap_enc",
-            masterKey,
-            context.applicationContext,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
+    private val prefs: SharedPreferences =
+        context.applicationContext.getSharedPreferences("biometric_wrap_prefs", Context.MODE_PRIVATE)
 
     companion object {
         private const val ALIAS = "pswdmngr_bio_wrap_v1"
         private const val PREF_BLOB = "wrapped_vault_key"
     }
 
-    private fun keystore(): KeyStore =
+    private fun keystore(): KeyStore? = try {
         KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    } catch (_: Throwable) {
+        null
+    }
 
-    private fun getOrCreateKey(): SecretKey {
-        keystore().getKey(ALIAS, null)?.let { return it as SecretKey }
+    private fun getOrCreateKey(): SecretKey? = try {
+        val ks = keystore() ?: return null
+        ks.getKey(ALIAS, null)?.let { return it as? SecretKey }
         val spec = KeyGenParameterSpec.Builder(
             ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
         )
@@ -51,30 +45,39 @@ class KeystoreWrapper(context: Context) {
             .setUserAuthenticationValidityDurationSeconds(10)
             .setInvalidatedByBiometricEnrollment(true)
             .build()
-        return KeyGenerator.getInstance(
+        KeyGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
         ).apply { init(spec) }.generateKey()
+    } catch (_: Throwable) {
+        null
     }
 
-    val isEnabled: Boolean get() = prefs.contains(PREF_BLOB)
+    val isEnabled: Boolean get() = try { prefs.contains(PREF_BLOB) } catch (_: Throwable) { false }
 
     /** Call right after a successful master-password unlock + BiometricPrompt auth. */
-    fun enable(vaultKey: ByteArray) {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        val ct = cipher.doFinal(vaultKey)
-        val blob = cipher.iv + ct
-        prefs.edit().putString(PREF_BLOB, android.util.Base64.encodeToString(blob, android.util.Base64.NO_WRAP)).apply()
+    fun enable(vaultKey: ByteArray): Boolean {
+        return try {
+            val key = getOrCreateKey() ?: return false
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+            val ct = cipher.doFinal(vaultKey)
+            val blob = cipher.iv + ct
+            prefs.edit().putString(PREF_BLOB, android.util.Base64.encodeToString(blob, android.util.Base64.NO_WRAP)).apply()
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /** Call right after BiometricPrompt success. Returns the vault key, or null if unavailable/invalidated. */
     fun unwrap(): ByteArray? {
-        val b64 = prefs.getString(PREF_BLOB, null) ?: return null
+        val b64 = try { prefs.getString(PREF_BLOB, null) } catch (_: Throwable) { null } ?: return null
         return try {
+            val key = getOrCreateKey() ?: return null
             val blob = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
-                Cipher.DECRYPT_MODE, getOrCreateKey(),
+                Cipher.DECRYPT_MODE, key,
                 GCMParameterSpec(128, blob.copyOfRange(0, 12))
             )
             cipher.doFinal(blob.copyOfRange(12, blob.size))
@@ -86,7 +89,7 @@ class KeystoreWrapper(context: Context) {
     }
 
     fun disable() {
-        prefs.edit().remove(PREF_BLOB).apply()
-        try { keystore().deleteEntry(ALIAS) } catch (_: Exception) {}
+        try { prefs.edit().remove(PREF_BLOB).apply() } catch (_: Throwable) {}
+        try { keystore()?.deleteEntry(ALIAS) } catch (_: Throwable) {}
     }
 }

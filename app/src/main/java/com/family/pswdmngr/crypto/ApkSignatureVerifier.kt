@@ -3,8 +3,7 @@ package com.family.pswdmngr.crypto
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Base64
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+
 import java.security.MessageDigest
 
 /**
@@ -102,16 +101,8 @@ object ApkSignatureVerifier {
         } catch (e: Exception) { null }
     }
 
-    private fun prefs(ctx: Context) = run {
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        EncryptedSharedPreferences.create(
-            PREFS_NAME,
-            masterKey,
-            ctx.applicationContext,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
+    private fun prefs(ctx: Context) =
+        ctx.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private fun getRecordedHash(ctx: Context): String? =
         prefs(ctx).getString(KEY_RECORDED_HASH, null)

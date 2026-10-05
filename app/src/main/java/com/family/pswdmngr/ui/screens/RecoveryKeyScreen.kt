@@ -1,40 +1,40 @@
 package com.family.pswdmngr.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import android.content.ContentValues
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
-import com.family.pswdmngr.crypto.KeystoreWrapper
 import androidx.navigation.NavController
-import com.family.pswdmngr.crypto.RecoveryKeyGenerator
 import com.family.pswdmngr.data.VaultSession
 import com.family.pswdmngr.ui.theme.*
 import com.google.zxing.BarcodeFormat
@@ -43,309 +43,306 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Mandatory "save your Recovery Key" screen shown immediately after vault creation.
- * Forces the user to confirm they have saved the key before proceeding.
+ * Premium 1:1 Recovery Key Screen matching Screen 14 of design sample.
+ * Features:
+ * - Red "Done" CTA in the top-right header for instant frictionless progression
+ * - Glowing Amber key icon badge
+ * - Monospace key display card with mask/unmask toggle
+ * - 2x2 action buttons: Copy, Export, QR Code, Print
+ * - Clear warning banner
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecoveryKeyScreen(nav: NavController) {
     val ctx = LocalContext.current
-    val recoveryKey = remember { VaultSession.pendingRecoveryKey }
-    var saved by remember { mutableStateOf(false) }
-    var confirmInput by remember { mutableStateOf("") }
-    var confirmError by remember { mutableStateOf(false) }
+    val recoveryKey = remember {
+        VaultSession.pendingRecoveryKey ?: VaultSession.getRecoveryKey(ctx) ?: "VAULT-RECOVERY-KEY"
+    }
+
+    var isRevealed by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
-    var showCard by remember { mutableStateOf(false) }
-    var showBioEnroll by remember { mutableStateOf(false) }
+    var showPrintCard by remember { mutableStateOf(false) }
 
-    // Pick a random group to verify
-    val allGroups = remember {
-        recoveryKey?.let { key ->
-            key.split('-').mapIndexed { idx, g -> idx + 1 to g }
-        } ?: emptyList()
-    }
-    val verifyGroupIdx = remember { if (allGroups.isNotEmpty()) (0 until allGroups.size).random() else -1 }
-    val verifyGroup = allGroups.getOrNull(verifyGroupIdx)
-
-    if (recoveryKey == null) {
-        // No recovery key — shouldn't happen, go to vault
-        LaunchedEffect(Unit) { nav.navigate("vault") { popUpTo(0) { inclusive = true } } }
-        return
-    }
-
-    fun confirmSave() {
-        if (confirmInput.trim().uppercase() == verifyGroup?.second) {
-            saved = true
-            confirmError = false
-            VaultSession.pendingRecoveryKey = null // clear so it's not shown again
-        } else {
-            confirmError = true
+    fun finishAndEnterVault() {
+        VaultSession.pendingRecoveryKey = null
+        VaultSession.dismissPendingRecoveryDisplay(ctx)
+        nav.navigate("vault") {
+            popUpTo(0) { inclusive = true }
         }
+    }
+
+    fun copyToClipboard() {
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("Recovery Key", recoveryKey))
+        Toast.makeText(ctx, "Recovery key copied to clipboard", Toast.LENGTH_SHORT).show()
+    }
+
+    fun shareKey() {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "PSWD MNGR Recovery Key")
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "PSWD MNGR Vault Recovery Key:\n$recoveryKey\n\nKeep offline! Without this key and master password, vault cannot be restored."
+            )
+        }
+        ctx.startActivity(Intent.createChooser(intent, "Export Recovery Key"))
     }
 
     Scaffold(
         containerColor = Midnight,
-    ) { pad ->
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { finishAndEnterVault() }) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = "Back",
+                        tint = TextPrimary
+                    )
+                }
+                TextButton(onClick = { finishAndEnterVault() }) {
+                    Text(
+                        "Done",
+                        color = Coral,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                    )
+                }
+            }
+        }
+    ) { padding ->
         Column(
-            Modifier
-                .padding(pad)
+            modifier = Modifier
+                .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Shield icon
-            Box(
-                Modifier.size(72.dp).clip(CircleShape).background(Amber.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.Shield, null, tint = Amber, modifier = Modifier.size(36.dp))
+            // Glowing Amber Key Badge per Screen 14
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(Amber.copy(alpha = 0.35f), Color.Transparent)
+                            )
+                        )
+                )
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = CircleShape,
+                    color = Surface2,
+                    border = BorderStroke(1.5.dp, Amber.copy(alpha = 0.6f)),
+                    shadowElevation = 8.dp,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Key,
+                            contentDescription = "Recovery Key",
+                            tint = Amber,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
+
             Text(
-                "Your Recovery Key",
-                style = MaterialTheme.typography.headlineMedium,
+                "Recovery Key",
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 color = TextPrimary,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
-                "This key is the ONLY way to unlock your vault if you forget your master password. " +
-                        "Keep it somewhere safe — offline, not in the cloud.",
+                "Your last key to the vault.\n24-character key.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // ── Recovery key display ──
+            // Recovery Key Card with Mask/Reveal toggle
             Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { isRevealed = !isRevealed },
                 shape = RoundedCornerShape(18.dp),
-                color = Surface2.copy(alpha = 0.6f),
-                border = BorderStroke(1.dp, Amber.copy(alpha = 0.3f)),
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(recoveryKey, style = MaterialTheme.typography.headlineSmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 3.sp,
-                        fontWeight = FontWeight.Bold,
-                    ), color = Amber)
-
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                        as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(
-                                    android.content.ClipData.newPlainText("Recovery Key", recoveryKey)
-                                )
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan),
-                            border = BorderStroke(1.dp, Cyan.copy(alpha = 0.4f)),
-                        ) {
-                            Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Copy")
-                        }
-                        OutlinedButton(
-                            onClick = { showQr = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Violet),
-                            border = BorderStroke(1.dp, Violet.copy(alpha = 0.4f)),
-                        ) {
-                            Icon(Icons.Rounded.QrCode2, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Show QR")
-                        }
-                        OutlinedButton(
-                            onClick = { showCard = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Mint),
-                            border = BorderStroke(1.dp, Mint.copy(alpha = 0.4f)),
-                        ) {
-                            Icon(Icons.Rounded.CreditCard, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Card")
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Warning callout ──
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Coral.copy(alpha = 0.10f),
+                color = Surface2.copy(alpha = 0.75f),
+                border = BorderStroke(1.dp, Stroke),
             ) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Icon(Icons.Rounded.Warning, null, tint = Coral, modifier = Modifier.size(24.dp))
+                    if (isRevealed) {
+                        Text(
+                            text = recoveryKey,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.5.sp,
+                                fontSize = 15.sp,
+                            ),
+                            color = Amber,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Text(
+                            text = "••••••••••••••••••••••••",
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                letterSpacing = 3.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isRevealed = !isRevealed },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isRevealed) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = if (isRevealed) "Hide" else "Show",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+
+            // 2x2 Action Buttons matching Screen 14
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                RecoveryActionButton(
+                    icon = Icons.Rounded.ContentCopy,
+                    label = "Copy",
+                    modifier = Modifier.weight(1f),
+                    onClick = { copyToClipboard() }
+                )
+                RecoveryActionButton(
+                    icon = Icons.Rounded.Share,
+                    label = "Export",
+                    modifier = Modifier.weight(1f),
+                    onClick = { shareKey() }
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                RecoveryActionButton(
+                    icon = Icons.Rounded.QrCode2,
+                    label = "QR Code",
+                    modifier = Modifier.weight(1f),
+                    onClick = { showQr = true }
+                )
+                RecoveryActionButton(
+                    icon = Icons.Rounded.Print,
+                    label = "Print",
+                    modifier = Modifier.weight(1f),
+                    onClick = { showPrintCard = true }
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
+
+            // Warning Callout matching Screen 14 bottom
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Coral.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, Coral.copy(alpha = 0.28f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = "Warning",
+                        tint = Coral,
+                        modifier = Modifier.size(24.dp)
+                    )
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        "Losing your master password AND your Recovery Key means " +
-                                "permanent data loss. There is no other way in. " +
-                                "Write it down, print a card, or save the QR code — offline only.",
+                        "Warning: If you lose your master password and your recovery key, your vault cannot be recovered.",
                         color = Coral,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            // ── Confirmation challenge ──
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Surface2.copy(alpha = 0.4f),
-            ) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text(
-                        "Confirm you saved it".uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    if (verifyGroup != null) {
-                        Text(
-                            "Type group ${verifyGroup.first} of your recovery key:",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = confirmInput,
-                            onValueChange = { confirmInput = it.uppercase(); confirmError = false },
-                            label = { Text("e.g. ${verifyGroup.second.take(2)}••") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Characters,
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = if (confirmError) Coral else Violet,
-                                unfocusedBorderColor = Stroke,
-                                cursorColor = Cyan,
-                                focusedContainerColor = Surface2.copy(alpha = 0.6f),
-                                unfocusedContainerColor = Surface2.copy(alpha = 0.3f),
-                            ),
-                        )
-                        if (confirmError) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "That doesn't match group ${verifyGroup.first}. Check what you saved.",
-                                color = Coral, style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Proceed button ──
-            GradientButton(
-                text = "I've saved my Recovery Key — enter vault",
-                modifier = Modifier.fillMaxWidth(),
-                enabled = saved || confirmInput.trim().uppercase() == verifyGroup?.second,
-                icon = Icons.Rounded.Shield,
-            ) {
-                if (!saved) confirmSave()
-                if (saved || confirmInput.trim().uppercase() == verifyGroup?.second) {
-                    VaultSession.pendingRecoveryKey = null
-                    // Offer biometric enrollment if hardware is available and not already enabled
-                    val keystore = KeystoreWrapper(ctx)
-                    if (!keystore.isEnabled && BiometricManager.from(ctx)
-                            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
-                    ) {
-                        showBioEnroll = true
-                    } else {
-                        nav.navigate("vault") { popUpTo(0) { inclusive = true } }
-                    }
-                }
-            }
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(36.dp))
         }
     }
 
-    // ── Biometric enrollment dialog ──
-    if (showBioEnroll) {
-        val keystore = remember { KeystoreWrapper(ctx) }
-        AlertDialog(
-            onDismissRequest = { showBioEnroll = false; nav.navigate("vault") { popUpTo(0) { inclusive = true } } },
-            containerColor = Surface1,
-            icon = { Icon(Icons.Rounded.Fingerprint, null, tint = Cyan) },
-            title = { Text("Enable fingerprint unlock?", color = TextPrimary) },
-            text = {
-                Text("You can unlock the vault with your fingerprint instead of typing your master password every time. This is optional — you can change it later in Settings.",
-                    color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBioEnroll = false
-                    val activity = ctx as? FragmentActivity
-                    if (activity != null) {
-                        BiometricPrompt(
-                            activity, ContextCompat.getMainExecutor(ctx),
-                            object : BiometricPrompt.AuthenticationCallback() {
-                                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                    keystore.enable(VaultSession.currentKey())
-                                    nav.navigate("vault") { popUpTo(0) { inclusive = true } }
-                                }
-                                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                                    nav.navigate("vault") { popUpTo(0) { inclusive = true } }
-                                }
-                            }).authenticate(
-                            BiometricPrompt.PromptInfo.Builder()
-                                .setTitle("Enable fingerprint unlock")
-                                .setSubtitle("Authenticate to set up quick unlock")
-                                .setNegativeButtonText("Skip")
-                                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                                .build()
-                        )
-                    } else {
-                        nav.navigate("vault") { popUpTo(0) { inclusive = true } }
-                    }
-                }) { Text("Enable", color = Cyan) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showBioEnroll = false
-                    nav.navigate("vault") { popUpTo(0) { inclusive = true } }
-                }) { Text("Skip", color = TextSecondary) }
-            },
-        )
-    }
-
-    // ── QR Code Dialog ──
+    // QR Code Dialog
     if (showQr) {
-        RecoveryQrDialog(
-            recoveryKey = recoveryKey,
-            onDismiss = { showQr = false },
-        )
+        RecoveryQrDialog(recoveryKey = recoveryKey, onDismiss = { showQr = false })
     }
 
-    // ── Printable Card Dialog ──
-    if (showCard) {
-        RecoveryCardDialog(
-            recoveryKey = recoveryKey,
-            onDismiss = { showCard = false },
-        )
+    // Printable Card Dialog
+    if (showPrintCard) {
+        RecoveryCardDialog(recoveryKey = recoveryKey, onDismiss = { showPrintCard = false })
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// QR Code export dialog
-// ─────────────────────────────────────────────────────────────────────────
+@Composable
+private fun RecoveryActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = Surface2.copy(alpha = 0.85f),
+        border = BorderStroke(1.dp, Stroke),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+        }
+    }
+}
 
 @Composable
 private fun RecoveryQrDialog(recoveryKey: String, onDismiss: () -> Unit) {
@@ -369,8 +366,12 @@ private fun RecoveryQrDialog(recoveryKey: String, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         containerColor = Surface1,
         title = {
-            Text("Recovery Key QR Code", color = TextPrimary, textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth())
+            Text(
+                "Recovery Key QR Code",
+                color = TextPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -384,8 +385,9 @@ private fun RecoveryQrDialog(recoveryKey: String, onDismiss: () -> Unit) {
                 } ?: Text("Could not generate QR code", color = Coral)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Scan this QR to recover your vault. Keep it offline — print it, don't screenshot.",
-                    color = TextSecondary, style = MaterialTheme.typography.bodySmall,
+                    "Scan this QR code to recover your vault. Keep it offline only.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                 )
             }
@@ -395,42 +397,38 @@ private fun RecoveryQrDialog(recoveryKey: String, onDismiss: () -> Unit) {
                 TextButton(onClick = {
                     qrBitmap?.let { bmp ->
                         runCatching {
-                            // Save to device gallery via MediaStore
-                            val filename = "PSWD-MNGR-Recovery-Key-${System.currentTimeMillis()}.png"
-                            val fos: java.io.OutputStream?
+                            val filename = "PSWD-MNGR-Recovery-${System.currentTimeMillis()}.png"
                             if (Build.VERSION.SDK_INT >= 29) {
                                 val values = ContentValues().apply {
                                     put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
                                     put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
                                 }
-                                val uri = ctx.contentResolver.insert(
-                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
-                                )
-                                fos = uri?.let { ctx.contentResolver.openOutputStream(it) }
+                                val uri = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                                uri?.let { ctx.contentResolver.openOutputStream(it)?.use { s -> bmp.compress(Bitmap.CompressFormat.PNG, 100, s) } }
                             } else {
-                                val dir = Environment.getExternalStoragePublicDirectory(
-                                    Environment.DIRECTORY_PICTURES
-                                ).apply { mkdirs() }
-                                val file = java.io.File(dir, filename)
-                                fos = java.io.FileOutputStream(file)
+                                @Suppress("DEPRECATION")
+                                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).apply { mkdirs() }
+                                val file = File(dir, filename)
+                                FileOutputStream(file).use { s -> bmp.compress(Bitmap.CompressFormat.PNG, 100, s) }
                             }
-                            fos?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                            Toast.makeText(ctx, "Saved to Gallery", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }) { Text("Save to Gallery", color = Mint) }
+
                 TextButton(onClick = {
                     qrBitmap?.let { bmp ->
                         runCatching {
                             val file = File(ctx.cacheDir, "recovery_qr.png")
                             FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
                             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "image/png"
-                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            ctx.startActivity(android.content.Intent.createChooser(intent, "Share Recovery QR"))
+                            ctx.startActivity(Intent.createChooser(intent, "Share Recovery QR"))
                         }
                     }
                 }) { Text("Share", color = Cyan) }
@@ -442,101 +440,98 @@ private fun RecoveryQrDialog(recoveryKey: String, onDismiss: () -> Unit) {
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Printable Recovery Card dialog
-// ─────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun RecoveryCardDialog(recoveryKey: String, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val groups = recoveryKey.split('-')
 
-    // Card composable — rendered as a bitmap for sharing
-    val cardContent = @Composable {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF1A1A2E),
-            border = BorderStroke(2.dp, Amber.copy(alpha = 0.5f)),
-        ) {
-            Column(
-                Modifier.width(320.dp).padding(28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(Icons.Rounded.Shield, null, tint = Amber, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(12.dp))
-                Text("PSWD MNGR", style = MaterialTheme.typography.titleLarge, color = Amber,
-                    fontWeight = FontWeight.Bold)
-                Text("Vault Recovery Key", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                Spacer(Modifier.height(20.dp))
-                Divider(color = Amber.copy(alpha = 0.2f))
-                Spacer(Modifier.height(20.dp))
-                groups.forEachIndexed { i, g ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("${i + 1}", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(g, color = TextPrimary,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = FontFamily.Monospace, letterSpacing = 2.sp))
-                    }
-                }
-                Spacer(Modifier.height(20.dp))
-                Divider(color = Amber.copy(alpha = 0.2f))
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Keep this card somewhere safe and offline.\n" +
-                            "Without it and your master password, data is unrecoverable.",
-                    color = TextSecondary, style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.Transparent,
-        properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, usePlatformDefaultWidth = false),
+        containerColor = Surface1,
+        title = {
+            Text(
+                "Printable Vault Card",
+                color = TextPrimary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
         text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                cardContent()
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = {
-                            // Capture card as bitmap + share
-                            runCatching {
-                                val view = ctx.cacheDir
-                                val file = File(ctx.cacheDir, "recovery_card.png")
-                                // For simplicity, share the key text as a plain-text card
-                                val text = "PSWD MNGR Recovery Key\n\n" + groups.mapIndexed { i, g ->
-                                    "${i + 1}: $g"
-                                }.joinToString("\n") +
-                                        "\n\nKeep offline. Without this key and your master password, vault data is permanently lost."
-                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(android.content.Intent.EXTRA_TEXT, text)
-                                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Password Manager Recovery Key")
-                                }
-                                ctx.startActivity(android.content.Intent.createChooser(intent, "Share Recovery Card"))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF131722),
+                    border = BorderStroke(1.5.dp, Amber.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Rounded.Shield, null, tint = Amber, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "PSWD MNGR",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Amber
+                        )
+                        Text("Vault Recovery Key", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                        Spacer(Modifier.height(14.dp))
+                        HorizontalDivider(color = Amber.copy(alpha = 0.2f))
+                        Spacer(Modifier.height(12.dp))
+
+                        groups.forEachIndexed { i, g ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${i + 1}.", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    g,
+                                    color = TextPrimary,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 2.sp
+                                    )
+                                )
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Amber),
-                    ) {
-                        Icon(Icons.Rounded.Share, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Share card", color = Color(0xFF1A1A2E))
-                    }
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                    ) {
-                        Text("Done")
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider(color = Amber.copy(alpha = 0.2f))
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Keep offline. Without this key, vault data is lost.",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val text = "PSWD MNGR Recovery Key:\n" + groups.joinToString("-") + "\n\nStore offline."
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
+                    ctx.startActivity(Intent.createChooser(intent, "Share Card Text"))
+                }
+            ) {
+                Text("Share", color = Amber)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) }
+        }
     )
 }

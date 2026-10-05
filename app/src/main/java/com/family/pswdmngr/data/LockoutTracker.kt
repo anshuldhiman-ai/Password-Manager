@@ -2,8 +2,7 @@ package com.family.pswdmngr.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+
 
 /**
  * Persistent exponential-backoff lockout tracker for failed vault-unlock
@@ -35,14 +34,8 @@ object LockoutTracker {
     private fun prefs(ctx: Context): SharedPreferences {
         val existing = cachedPrefs
         if (existing != null) return existing
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        return EncryptedSharedPreferences.create(
-            PREFS_NAME,
-            masterKey,
-            ctx.applicationContext,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        ).also { cachedPrefs = it }
+        return ctx.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .also { cachedPrefs = it }
     }
 
     /** Number of consecutive failed unlock attempts. */

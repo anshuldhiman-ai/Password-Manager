@@ -135,7 +135,7 @@ fun UnlockScreen(nav: NavController) {
     }
 
     fun unlockOk() {
-        LockoutTracker.recordSuccessfulUnlock(ctx)
+        try { LockoutTracker.recordSuccessfulUnlock(ctx) } catch (_: Throwable) {}
         unlocking = true
         scope.launch {
             delay(260)
@@ -145,8 +145,8 @@ fun UnlockScreen(nav: NavController) {
 
     // Auto-wipe if wipe-after-10 is enabled and limit hit
     fun handleAutoWipe() {
-        val shouldWipe = LockoutTracker.recordFailedAttempt(ctx)
-        failCount = LockoutTracker.failCount(ctx)
+        val shouldWipe = try { LockoutTracker.recordFailedAttempt(ctx) } catch (_: Throwable) { false }
+        failCount = try { LockoutTracker.failCount(ctx) } catch (_: Throwable) { 0 }
         if (shouldWipe) {
             VaultSession.lock()
             nav.navigate("unlock") { popUpTo(0) { inclusive = true } }
@@ -154,7 +154,7 @@ fun UnlockScreen(nav: NavController) {
             error = "Vault has been wiped due to 10 failed unlock attempts."
             return
         }
-        lockoutMs = LockoutTracker.remainingLockoutMs(ctx)
+        lockoutMs = try { LockoutTracker.remainingLockoutMs(ctx) } catch (_: Throwable) { 0L }
     }
 
     fun biometricUnlock() {

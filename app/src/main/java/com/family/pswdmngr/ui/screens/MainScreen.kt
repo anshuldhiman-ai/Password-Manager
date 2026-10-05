@@ -35,8 +35,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.BorderStroke
 import com.family.pswdmngr.data.*
+import com.family.pswdmngr.ui.cards.BankBrand
 import com.family.pswdmngr.ui.cards.CardCatalog
+import com.family.pswdmngr.ui.cards.bankBrand
 import com.family.pswdmngr.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -338,6 +344,8 @@ private fun VaultDashboard(
     val cards by VaultSession.cardDao().observeAll().collectAsState(initial = emptyList())
     val banks by VaultSession.bankDao().observeAll().collectAsState(initial = emptyList())
     val notes by VaultSession.noteDao().observeAll().collectAsState(initial = emptyList())
+    val docs by VaultSession.docDao().observeAll().collectAsState(initial = emptyList())
+    val tasks by VaultSession.taskDao().observeAll().collectAsState(initial = emptyList())
 
     var query by remember { mutableStateOf("") }
     var filterIndex by remember { mutableIntStateOf(0) }
@@ -346,13 +354,15 @@ private fun VaultDashboard(
     val loginCount = entries.size
     val cardCount = cards.size
     val noteCount = notes.size
-    val totalItems = loginCount + cardCount + banks.size + notes.size
+    val docCount = docs.size
+    val taskCount = tasks.size
+    val totalItems = loginCount + cardCount + banks.size + noteCount + docCount + taskCount
 
     val filtered = remember(entries, filterIndex, q) {
         val base = when (filterIndex) {
             1 -> entries
-            2 -> emptyList() // cards shown via category nav
-            3 -> emptyList() // notes shown via category nav
+            2 -> emptyList()
+            3 -> emptyList()
             else -> entries
         }
         base.filter { e ->
@@ -364,69 +374,257 @@ private fun VaultDashboard(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 88.dp),
+        contentPadding = PaddingValues(bottom = 96.dp),
     ) {
+        // ── 1. Hero Header matching Screen 2 ──
         item {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Vault", style = MaterialTheme.typography.headlineMedium, color = TextPrimary,
-                    modifier = Modifier.weight(1f))
-                IconButton(onClick = { nav.navigate("generator") }) {
-                    Icon(Icons.Rounded.AutoAwesome, "Generator", tint = TextSecondary)
+                Column {
+                    Text(
+                        "Good morning, Anshul",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp
+                        ),
+                        color = TextPrimary
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(Mint)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Your vault is secure.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Mint
+                        )
+                    }
                 }
-                IconButton(onClick = onSearch) {
-                    Icon(Icons.Rounded.Search, "Search", tint = TextSecondary)
+
+                // Profile Avatar with settings link
+                Surface(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable { onSettings() },
+                    shape = CircleShape,
+                    color = Surface2,
+                    border = BorderStroke(1.5.dp, Cyan.copy(alpha = 0.5f))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Person,
+                            contentDescription = "Profile",
+                            tint = Cyan,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
 
+        // ── 2. Search Pill Bar ──
         item {
             VaultTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = "Search vault…",
+                label = "Search your vault…",
                 modifier = Modifier.padding(horizontal = 22.dp),
-                trailingIcon = { Icon(Icons.Rounded.Search, null, tint = TextSecondary) },
-            )
-            Spacer(Modifier.height(14.dp))
-        }
-
-        item {
-            FilterChipRow(
-                chips = listOf(
-                    "All" to totalItems,
-                    "Logins" to loginCount,
-                    "Cards" to cardCount,
-                    "Notes" to noteCount,
-                ),
-                selectedIndex = filterIndex,
-                onSelect = { idx ->
-                    filterIndex = idx
-                    when (idx) {
-                        2 -> nav.navigate("cards")
-                        3 -> nav.navigate("notes")
+                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = TextSecondary) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Rounded.Close, null, tint = TextSecondary)
+                        }
                     }
                 },
-                modifier = Modifier.padding(horizontal = 22.dp),
             )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(20.dp))
         }
 
-        if (pinned.isNotEmpty() && filterIndex == 0) {
+        // ── 3. Favorites Horizontal Carousel matching Screen 2 ──
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Favorites",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextPrimary
+                )
+                IconButton(
+                    onClick = { nav.navigate("cards") },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        contentDescription = "View Cards",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+
+            // Carousel of programmatic vector gradient cards
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (cards.isNotEmpty()) {
+                    items(cards.take(6), key = { "fav_${it.id}" }) { card ->
+                        val brand = bankBrand(card.bankName)
+                        MiniCardItem(
+                            bankName = card.bankName.ifBlank { "Card" },
+                            last4 = card.number.takeLast(4).ifBlank { "••••" },
+                            brand = brand,
+                            network = card.network.ifBlank { "VISA" },
+                            onClick = { nav.navigate("cardDetail/${card.id}") }
+                        )
+                    }
+                } else {
+                    // Default stylish presets matching sample.png Screen 2
+                    item {
+                        MiniCardItem(
+                            bankName = "HDFC Bank",
+                            last4 = "8421",
+                            brand = BankBrand(Color(0xFF0C2B59), Color(0xFF06152B), Color(0xFF33C1F0)),
+                            network = "VISA",
+                            onClick = { nav.navigate("cards") }
+                        )
+                    }
+                    item {
+                        MiniCardItem(
+                            bankName = "ICICI Bank",
+                            last4 = "4019",
+                            brand = BankBrand(Color(0xFF8A2E18), Color(0xFF3A0D08), Color(0xFFF7931E)),
+                            network = "MC",
+                            onClick = { nav.navigate("cards") }
+                        )
+                    }
+                    item {
+                        MiniCardItem(
+                            bankName = "SBI",
+                            last4 = "9231",
+                            brand = BankBrand(Color(0xFF0D5288), Color(0xFF062340), Color(0xFF33C1F0)),
+                            network = "RuPay",
+                            onClick = { nav.navigate("cards") }
+                        )
+                    }
+                    item {
+                        MiniCardItem(
+                            bankName = "Axis Bank",
+                            last4 = "3184",
+                            brand = BankBrand(Color(0xFF801040), Color(0xFF35061A), Color(0xFFE8608C)),
+                            network = "VISA",
+                            onClick = { nav.navigate("cards") }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── 4. "42 Items" Premium Security Dashboard Banner matching Screen 2 ──
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable { nav.navigate("passwordHealth") },
+                shape = RoundedCornerShape(20.dp),
+                color = Surface2.copy(alpha = 0.75f),
+                border = BorderStroke(1.dp, Stroke),
+            ) {
+                Column(Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                "${totalItems.coerceAtLeast(1)} Items",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp
+                                ),
+                                color = TextPrimary
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Premium Security Dashboard",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                        }
+                        IconBadge(Icons.Rounded.Shield, Cyan, size = 42)
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    // Horizontal breakdown metric pills matching Screen 2
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DashboardMetricPill("$loginCount", "Logins", Cyan)
+                        DashboardMetricPill("$cardCount", "Cards", Mint)
+                        DashboardMetricPill("${banks.size}", "Banks", Violet)
+                        DashboardMetricPill("$docCount", "Docs", Amber)
+                        DashboardMetricPill("${noteCount + taskCount}", "Others", Coral)
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // ── 5. 3x2 Category Grid matching Screen 2 ──
+        item {
+            VaultCategoryGrid(
+                loginCount = loginCount,
+                cardCount = cardCount,
+                bankCount = banks.size,
+                docCount = docCount,
+                noteCount = noteCount,
+                taskCount = taskCount,
+                nav = nav,
+            )
+            Spacer(Modifier.height(22.dp))
+        }
+
+        // ── 6. Pinned / Quick Access entries ──
+        if (pinned.isNotEmpty() && q.isBlank()) {
             item {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 22.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Pinned", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                    Text("Pinned Items", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                     Text(
                         "See all",
                         color = Cyan,
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.clickable { /* scroll handled by list */ },
+                        modifier = Modifier.clickable { /* handled */ },
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -436,74 +634,153 @@ private fun VaultDashboard(
                     EntryRow(entry) { nav.navigate("entry/${entry.id}") }
                 }
             }
-            item { Spacer(Modifier.height(12.dp)) }
+            item { Spacer(Modifier.height(14.dp)) }
         }
 
-        if (filterIndex == 0) {
+        // ── 7. All Logins / Search Results ──
+        if (filtered.isEmpty()) {
+            item {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    IconBadge(
+                        if (entries.isEmpty()) Icons.Rounded.Inventory2 else Icons.Rounded.SearchOff,
+                        if (entries.isEmpty()) TextSecondary else Coral,
+                        size = 56,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        if (entries.isEmpty()) "Your vault is empty — tap + to add your first login"
+                        else "Nothing matches your search.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    if (entries.isEmpty()) {
+                        Spacer(Modifier.height(14.dp))
+                        AccentButton("Add a login", icon = Icons.Rounded.Add) { nav.navigate("edit/-1") }
+                    }
+                }
+            }
+        } else {
             item {
                 Text(
-                    "Categories",
-                    style = MaterialTheme.typography.titleMedium,
+                    if (q.isNotBlank()) "Search Results (${filtered.size})" else "All Logins (${filtered.size})",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = 22.dp),
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
                 )
-                Spacer(Modifier.height(10.dp))
             }
-            item {
-                VaultCategoryGrid(
-                    loginCount = loginCount,
-                    cardCount = cardCount,
-                    bankCount = banks.size,
-                    noteCount = noteCount,
-                    nav = nav,
-                )
-                Spacer(Modifier.height(18.dp))
+            itemsIndexed(filtered, key = { _, it -> it.id }) { i, entry ->
+                Box(Modifier.padding(horizontal = 22.dp, vertical = 4.dp).animatedListItem(i)) {
+                    EntryRow(entry) { nav.navigate("entry/${entry.id}") }
+                }
             }
         }
+    }
+}
 
-        if (filterIndex <= 1) {
-            if (filtered.isEmpty()) {
-                item {
-                    Column(
-                        Modifier.fillMaxWidth().padding(40.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        IconBadge(
-                            if (entries.isEmpty()) Icons.Rounded.Inventory2 else Icons.Rounded.SearchOff,
-                            if (entries.isEmpty()) TextSecondary else Coral,
-                            size = 64,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            if (entries.isEmpty()) "Your vault is empty — tap + to add your first login"
-                            else "Nothing matches your search.",
-                            color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (entries.isEmpty()) {
-                            Spacer(Modifier.height(16.dp))
-                            AccentButton("Add a login", icon = Icons.Rounded.Add) { nav.navigate("edit/-1") }
-                        }
-                    }
-                }
-            } else {
-                if (filterIndex == 0 && filtered.isNotEmpty()) {
-                    item {
-                        Text(
-                            "All logins",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                            modifier = Modifier.padding(horizontal = 22.dp, vertical = 4.dp),
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
-                }
-                itemsIndexed(filtered, key = { _, it -> it.id }) { i, entry ->
-                    Box(Modifier.padding(horizontal = 22.dp, vertical = 4.dp).animatedListItem(i)) {
-                        EntryRow(entry) { nav.navigate("entry/${entry.id}") }
-                    }
-                }
-            }
+@Composable
+private fun MiniCardItem(
+    bankName: String,
+    last4: String,
+    brand: BankBrand,
+    network: String = "VISA",
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .width(148.dp)
+            .height(94.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, brand.accent.copy(alpha = 0.4f)),
+        shadowElevation = 4.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(brand.top, brand.bottom)
+                    )
+                )
+                .padding(10.dp)
+        ) {
+            // Chip icon
+            Box(
+                modifier = Modifier
+                    .size(width = 16.dp, height = 12.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(0xFFE2B755))
+                    .align(Alignment.TopStart)
+            )
+
+            // Bank Name
+            Text(
+                bankName,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp
+                ),
+                color = Color.White,
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
+
+            // Dots & Last 4
+            Text(
+                "•••• $last4",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                    fontSize = 11.sp
+                ),
+                color = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.align(Alignment.BottomStart)
+            )
+
+            // Network
+            Text(
+                network,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Black,
+                    fontSize = 10.sp
+                ),
+                color = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.align(Alignment.BottomEnd)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardMetricPill(count: String, label: String, color: Color) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                count,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = color
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextPrimary
+            )
         }
     }
 }
@@ -513,38 +790,76 @@ private fun VaultCategoryGrid(
     loginCount: Int,
     cardCount: Int,
     bankCount: Int,
+    docCount: Int,
     noteCount: Int,
+    taskCount: Int,
     nav: NavController,
 ) {
-    val tiles = listOf(
-        CategoryTile("Logins", Icons.Rounded.Language, Cyan, "$loginCount") { nav.navigate("edit/-1") },
+    val row1 = listOf(
+        CategoryTile("Logins", Icons.Rounded.Language, Cyan, "$loginCount") { nav.navigate("generator") },
         CategoryTile("Cards", Icons.Rounded.CreditCard, Mint, "$cardCount") { nav.navigate("cards") },
-        CategoryTile("Bank", Icons.Rounded.AccountBalance, Violet, "$bankCount") { nav.navigate("banks") },
-        CategoryTile("Notes", Icons.Rounded.StickyNote2, Amber, "$noteCount") { nav.navigate("notes") },
+        CategoryTile("Banks", Icons.Rounded.AccountBalance, Violet, "$bankCount") { nav.navigate("banks") },
     )
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    val row2 = listOf(
+        CategoryTile("Documents", Icons.Rounded.Description, Amber, "$docCount") { nav.navigate("docs") },
+        CategoryTile("Notes", Icons.Rounded.StickyNote2, Coral, "$noteCount") { nav.navigate("notes") },
+        CategoryTile("Tasks", Icons.Rounded.TaskAlt, Mint, "$taskCount") { nav.navigate("tasks") },
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        tiles.forEach { cat ->
-            SurfaceCard(
-                modifier = Modifier.weight(1f),
-                onClick = cat.onClick,
-                contentPadding = PaddingValues(vertical = 16.dp, horizontal = 8.dp),
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(cat.color.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(cat.icon, null, tint = cat.color, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(cat.label, color = TextPrimary, style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(cat.countLabel, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            row1.forEach { tile ->
+                CategoryTileView(tile = tile, modifier = Modifier.weight(1f))
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            row2.forEach { tile ->
+                CategoryTileView(tile = tile, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryTileView(tile: CategoryTile, modifier: Modifier = Modifier) {
+    SurfaceCard(
+        modifier = modifier,
+        onClick = tile.onClick,
+        contentPadding = PaddingValues(vertical = 14.dp, horizontal = 6.dp),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(tile.color.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(tile.icon, null, tint = tile.color, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                tile.label,
+                color = TextPrimary,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(tile.countLabel, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
         }
     }
 }

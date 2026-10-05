@@ -359,7 +359,6 @@ fun AuthScrollColumn(
         modifier = modifier
             .fillMaxSize()
             .systemBarsPadding()
-            .imePadding()
             .verticalScroll(scrollState)
             .padding(padding),
         horizontalAlignment = horizontalAlignment,

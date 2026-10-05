@@ -86,19 +86,22 @@ object VaultSession {
         val existing = cachedPrefs
         if (existing != null) return existing
         val pref = try {
-            val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-            EncryptedSharedPreferences.create(
-                META_PREFS,
-                masterKey,
-                ctx.applicationContext,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
+            if (android.os.Build.VERSION.SDK_INT <= 28) {
+                // Android 9 (API 28) has well-documented Keystore bugs on Vivo/MediaTek devices.
+                // All values stored here (salts, dual-wrapped keys) are ALREADY
+                // cryptographically encrypted via Argon2id + AES-256-GCM.
+                ctx.applicationContext.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+            } else {
+                val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+                EncryptedSharedPreferences.create(
+                    META_PREFS,
+                    masterKey,
+                    ctx.applicationContext,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+                )
+            }
         } catch (e: Throwable) {
-            // Android 9 Keystore bug or corrupted keyset fallback:
-            // All values stored here (salts, dual-wrapped keys) are ALREADY
-            // cryptographically encrypted via Argon2id + AES-256-GCM, so
-            // standard SharedPreferences is fully secure as a fallback.
             ctx.applicationContext.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
         }
         return pref.also { cachedPrefs = it }
@@ -196,7 +199,7 @@ object VaultSession {
             .putString(KEY_RECOVERY_ENCRYPTED, b64(recoveryEncrypted))
             .putBoolean(KEY_HAS_RECOVERY, true)
             .putInt(KEY_DATA_VERSION, VAULT_VERSION_2)
-            .apply()
+            .commit()
 
         // 7. Open the DB with the vault master key
         openDb(ctx, vaultMasterKey)
