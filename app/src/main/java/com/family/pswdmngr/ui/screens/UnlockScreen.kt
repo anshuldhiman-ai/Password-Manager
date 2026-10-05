@@ -208,17 +208,23 @@ fun UnlockScreen(nav: NavController) {
     fun submitPasswordUnlock() {
         if (password.isNotEmpty() && lockoutMs <= 0 && !working) {
             working = true
+            error = null
             scope.launch {
-                val ok = withContext(Dispatchers.Default) {
-                    VaultSession.unlock(ctx, password.toCharArray())
-                }
-                working = false
-                if (ok) {
-                    unlockOk()
-                } else {
-                    password = ""
-                    error = "Wrong master password"
-                    handleAutoWipe()
+                try {
+                    val ok = withContext(Dispatchers.Default) {
+                        VaultSession.unlock(ctx, password.toCharArray())
+                    }
+                    working = false
+                    if (ok) {
+                        unlockOk()
+                    } else {
+                        password = ""
+                        error = "Wrong master password"
+                        handleAutoWipe()
+                    }
+                } catch (e: Throwable) {
+                    working = false
+                    error = e.localizedMessage ?: "Unlock failed"
                 }
             }
         }

@@ -37,6 +37,13 @@ class VaultApp : Application(), DefaultLifecycleObserver {
         super<Application>.onCreate()
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
 
+        // Pre-load SQLCipher native libraries so Room doesn't crash on Android 9/older devices
+        try {
+            net.sqlcipher.database.SQLiteDatabase.loadLibs(this)
+        } catch (e: Throwable) {
+            Log.e("VaultApp", "Failed to pre-load SQLCipher native libs", e)
+        }
+
         // Global crash handler — writes stack trace to file so we can debug
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

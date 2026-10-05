@@ -37,6 +37,7 @@ fun OnboardingScreen(nav: NavController) {
     var showPw by remember { mutableStateOf(false) }
     var showConfirmPw by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     val passwordFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
@@ -139,12 +140,18 @@ fun OnboardingScreen(nav: NavController) {
                 onDone = {
                     if (canProceed) {
                         working = true
+                        error = null
                         scope.launch {
-                            val recoveryKey = withContext(Dispatchers.Default) {
-                                VaultSession.create(ctx, password.toCharArray())
+                            try {
+                                val recoveryKey = withContext(Dispatchers.Default) {
+                                    VaultSession.create(ctx, password.toCharArray())
+                                }
+                                VaultSession.pendingRecoveryKey = recoveryKey
+                                nav.navigate("recoveryKey") { popUpTo(0) { inclusive = true } }
+                            } catch (e: Throwable) {
+                                working = false
+                                error = e.localizedMessage ?: "Failed to create vault"
                             }
-                            VaultSession.pendingRecoveryKey = recoveryKey
-                            nav.navigate("recoveryKey") { popUpTo(0) { inclusive = true } }
                         }
                     }
                 }
@@ -170,6 +177,12 @@ fun OnboardingScreen(nav: NavController) {
             }
         }
 
+        if (error != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(error ?: "", color = Coral, style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.align(Alignment.Start))
+        }
+
         Spacer(Modifier.height(28.dp))
         if (working) {
             CircularProgressIndicator(color = Cyan)
@@ -183,12 +196,18 @@ fun OnboardingScreen(nav: NavController) {
                 icon = Icons.Rounded.LockOpen,
             ) {
                 working = true
+                error = null
                 scope.launch {
-                    val recoveryKey = withContext(Dispatchers.Default) {
-                        VaultSession.create(ctx, password.toCharArray())
+                    try {
+                        val recoveryKey = withContext(Dispatchers.Default) {
+                            VaultSession.create(ctx, password.toCharArray())
+                        }
+                        VaultSession.pendingRecoveryKey = recoveryKey
+                        nav.navigate("recoveryKey") { popUpTo(0) { inclusive = true } }
+                    } catch (e: Throwable) {
+                        working = false
+                        error = e.localizedMessage ?: "Failed to create vault"
                     }
-                    VaultSession.pendingRecoveryKey = recoveryKey
-                    nav.navigate("recoveryKey") { popUpTo(0) { inclusive = true } }
                 }
             }
         }

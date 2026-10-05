@@ -52,10 +52,23 @@
     public static int i(...);
 }
 
-## Obfuscate everything else aggressively
--optimizationpasses 5
--repackageclasses ''
--allowaccessmodification
--mergeinterfacesaggressively
--overloadaggressively
--useuniqueclassmembernames
+## Preserve native methods
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+## SQLCipher
+-keep class net.sqlcipher.** { *; }
+-keep class net.sqlcipher.database.** { *; }
+-dontwarn net.sqlcipher.**
+
+## AndroidX Security Crypto
+-keep class androidx.security.crypto.** { *; }
+-dontwarn androidx.security.crypto.**
+
+## Room and SQLite
+-keep class androidx.room.** { *; }
+-keep class androidx.sqlite.** { *; }
+-dontwarn androidx.room.**
+-dontwarn androidx.sqlite.**
+

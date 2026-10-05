@@ -12,11 +12,12 @@ android {
         applicationId = "com.family.pswdmngr"
         minSdk = 28 // Android 9
         targetSdk = 34
-        versionCode = 8
-        versionName = "8.0.0"
+        versionCode = 9
+        versionName = "8.1.0"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }
     }
+
 
 
     // Signing credentials — NEVER hardcode passwords directly.

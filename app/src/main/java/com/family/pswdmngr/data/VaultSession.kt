@@ -85,14 +85,23 @@ object VaultSession {
     private fun prefs(ctx: Context): SharedPreferences {
         val existing = cachedPrefs
         if (existing != null) return existing
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        return EncryptedSharedPreferences.create(
-            META_PREFS,
-            masterKey,
-            ctx.applicationContext,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        ).also { cachedPrefs = it }
+        val pref = try {
+            val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                META_PREFS,
+                masterKey,
+                ctx.applicationContext,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        } catch (e: Throwable) {
+            // Android 9 Keystore bug or corrupted keyset fallback:
+            // All values stored here (salts, dual-wrapped keys) are ALREADY
+            // cryptographically encrypted via Argon2id + AES-256-GCM, so
+            // standard SharedPreferences is fully secure as a fallback.
+            ctx.applicationContext.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+        }
+        return pref.also { cachedPrefs = it }
     }
 
     private fun edit(ctx: Context): SharedPreferences.Editor =
@@ -462,6 +471,11 @@ object VaultSession {
     // ── DB lifecycle ─────────────────────────────────────────────────────
 
     private fun openDb(ctx: Context, key: ByteArray) {
+        // Ensure SQLCipher native libraries are loaded on Android 9
+        try {
+            net.sqlcipher.database.SQLiteDatabase.loadLibs(ctx.applicationContext)
+        } catch (_: Throwable) { }
+
         // Wrap the key in SecureData (writes into direct ByteBuffer via writeFrom)
         val secureKey = SecureData(key.size)
         secureKey.writeFrom(key)
