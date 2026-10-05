@@ -11,6 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -19,7 +21,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.family.pswdmngr.crypto.PasswordGenerator
 import com.family.pswdmngr.data.VaultSession
 import com.family.pswdmngr.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -35,18 +36,18 @@ fun OnboardingScreen(nav: NavController) {
     var showPw by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
 
-    val entropy = PasswordGenerator.entropy(password)
-    val strong = entropy >= 60 // ~12+ mixed chars
+    val passwordFocus = remember { FocusRequester() }
+    val confirmFocus = remember { FocusRequester() }
+
+    val strong = isPasswordStrong(password) // ~12+ mixed chars
     val match = password == confirm && password.isNotEmpty()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(HeroGradient)
-            .padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    AuthScrollColumn(
+        modifier = Modifier.background(HeroGradient),
     ) {
-        Spacer(Modifier.height(48.dp))
+        // The decorative hero shrinks on short viewports so the form itself
+        // still clears the fold on a 5" screen instead of burying the fields.
+        Spacer(Modifier.height(24.dp))
         Box(contentAlignment = Alignment.Center) {
             Box(
                 Modifier.size(120.dp).clip(CircleShape)
@@ -105,6 +106,7 @@ fun OnboardingScreen(nav: NavController) {
             value = password,
             onValueChange = { password = it },
             label = "Master password",
+            modifier = Modifier.focusRequester(passwordFocus),
             visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
             trailingIcon = {
@@ -118,35 +120,14 @@ fun OnboardingScreen(nav: NavController) {
         )
         Spacer(Modifier.height(10.dp))
 
-        // Strength meter
-        val meterColor = when {
-            entropy >= 60 -> Mint
-            entropy >= 40 -> Amber
-            else -> Coral
-        }
-        LinearProgressIndicator(
-            progress = { (entropy / 100.0).toFloat().coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp),
-            color = meterColor,
-            trackColor = Surface2,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            when {
-                password.isEmpty() -> " "
-                entropy >= 60 -> "Strong"
-                entropy >= 40 -> "Okay — longer is better"
-                else -> "Too weak"
-            },
-            style = MaterialTheme.typography.labelMedium, color = meterColor,
-            modifier = Modifier.align(Alignment.Start),
-        )
+        PasswordStrengthMeter(password)
 
         Spacer(Modifier.height(12.dp))
         VaultTextField(
             value = confirm,
             onValueChange = { confirm = it },
             label = "Confirm password",
+            modifier = Modifier.focusRequester(confirmFocus),
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
         )
@@ -156,7 +137,10 @@ fun OnboardingScreen(nav: NavController) {
                 modifier = Modifier.align(Alignment.Start))
         }
 
-        Spacer(Modifier.weight(1f))
+        // Fixed spacer, not weight(1f): weight is illegal under the unbounded
+        // max-height constraint a verticalScroll column imposes (it throws at
+        // measure time), which is the trap that made this screen unscrollable.
+        Spacer(Modifier.height(24.dp))
         if (working) {
             CircularProgressIndicator(color = Cyan)
             Spacer(Modifier.height(8.dp))

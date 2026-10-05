@@ -9,9 +9,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.navigation.NavController
+import com.family.pswdmngr.crypto.PasswordGenerator
 import com.family.pswdmngr.data.EntryCategory
 import com.family.pswdmngr.ui.theme.*
 import kotlinx.coroutines.delay
@@ -333,6 +337,84 @@ fun Modifier.animatedListItem(index: Int): Modifier {
     val rise by animateFloatAsState(if (shown) 0f else 26f, tween(280), label = "itemRise")
     return this.then(Modifier.graphicsLayer { this.alpha = alpha; translationY = rise })
 }
+
+/**
+ * Scrollable full-screen container for the auth screens (onboarding, unlock,
+ * recovery key, forgot password).
+ *
+ * These screens are taller than a phone viewport — onboarding alone is ~900dp —
+ * and a plain `fillMaxSize()` Column does **not** scroll: children past the
+ * bottom edge are laid out outside the parent's bounds and are both invisible
+ * and untouchable (the confirm-password field could not be scrolled to *or*
+ * tapped). Wrapping in [verticalScroll] makes the whole screen reachable, which
+ * also rescues it from large system font scales.
+ *
+ * [imePadding] keeps the focused field above the keyboard — the platform
+ * pan-and-resize path (adjustResize) is deliberately not relied on because the
+ * edge-to-edge window ignores window insets.
+ */
+@Composable
+fun AuthScrollColumn(
+    modifier: Modifier = Modifier,
+    scrollState: ScrollState = rememberScrollState(),
+    padding: PaddingValues = PaddingValues(28.dp),
+    horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(padding),
+        horizontalAlignment = horizontalAlignment,
+        verticalArrangement = verticalArrangement,
+        content = content,
+    )
+}
+
+/**
+ * Password strength meter — a tinted bar plus a one-word verdict.
+ *
+ * "Too weak" is purely advisory: the strength *gate* stays in the caller
+ * (`enabled = strong && match`), because a hard 60-bit threshold is a security
+ * policy rather than a presentation choice. This composable only reports.
+ */
+@Composable
+fun PasswordStrengthMeter(
+    password: String,
+    modifier: Modifier = Modifier,
+) {
+    val entropy = PasswordGenerator.entropy(password)
+    val meterColor = when {
+        entropy >= 60 -> Mint
+        entropy >= 40 -> Amber
+        else -> Coral
+    }
+    Column(modifier.fillMaxWidth()) {
+        LinearProgressIndicator(
+            progress = { (entropy / 100.0).toFloat().coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(6.dp),
+            color = meterColor,
+            trackColor = Surface2,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            when {
+                password.isEmpty() -> " "
+                entropy >= 60 -> "Strong"
+                entropy >= 40 -> "Okay — longer is better"
+                else -> "Too weak"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = meterColor,
+            modifier = Modifier.align(Alignment.Start),
+        )
+    }
+}
+
+/** True when [password] clears the 60-bit minimum enforced at account creation. */
+fun isPasswordStrong(password: String): Boolean = PasswordGenerator.entropy(password) >= 60
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

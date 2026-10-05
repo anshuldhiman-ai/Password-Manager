@@ -29,6 +29,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
@@ -84,6 +86,8 @@ fun UnlockScreen(nav: NavController) {
     var working by remember { mutableStateOf(false) }
     var unlocking by remember { mutableStateOf(false) } // success exit animation
     var showPasswordForm by remember { mutableStateOf(isRooted || !bioAvailable) }
+
+    val passwordFocus = remember { FocusRequester() }
 
     // --- Lockout (exponential backoff, persistent across screen restarts) ---
     var failCount by remember { mutableStateOf(LockoutTracker.failCount(ctx)) }
@@ -185,15 +189,12 @@ fun UnlockScreen(nav: NavController) {
     val exitAlpha by animateFloatAsState(
         if (unlocking) 0f else 1f, tween(260), label = "exitAlpha")
 
-    Column(
+    AuthScrollColumn(
         modifier = Modifier
-            .fillMaxSize()
             .background(HeroGradient)
-            .graphicsLayer { scaleX = exitScale; scaleY = exitScale; alpha = exitAlpha }
-            .padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .graphicsLayer { scaleX = exitScale; scaleY = exitScale; alpha = exitAlpha },
     ) {
-        Spacer(Modifier.height(60.dp))
+        Spacer(Modifier.height(28.dp))
 
         // --- Security warning banners ---
         if (showSecurityWarnings) {
@@ -268,6 +269,7 @@ fun UnlockScreen(nav: NavController) {
                     onValueChange = { password = it; error = null },
                     enabled = lockoutMs <= 0,
                     label = "Master password",
+                    modifier = Modifier.focusRequester(passwordFocus),
                     visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                     trailingIcon = {
@@ -306,7 +308,8 @@ fun UnlockScreen(nav: NavController) {
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        // Fixed spacer, not weight(1f) — see AuthScrollColumn.
+        Spacer(Modifier.height(32.dp))
 
         if (working) {
             CircularProgressIndicator(color = Cyan)

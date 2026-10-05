@@ -25,7 +25,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.family.pswdmngr.crypto.PasswordGenerator
 import com.family.pswdmngr.crypto.RecoveryKeyGenerator
 import com.family.pswdmngr.data.VaultSession
 import com.family.pswdmngr.ui.theme.*
@@ -63,10 +62,14 @@ fun ForgotPasswordScreen(nav: NavController) {
         nav.navigate("vault") { popUpTo(0) { inclusive = true } }
     }
 
-    Box(
-        Modifier.fillMaxSize().background(HeroGradient).padding(28.dp),
-        contentAlignment = Alignment.Center,
+    AuthScrollColumn(
+        modifier = Modifier.background(HeroGradient),
     ) {
+        // Pushes the (shorter) step content down to roughly the optical centre
+        // the old centred Box gave it, without the overflow that left the
+        // primary button unreachable on short screens.
+        Spacer(Modifier.height(24.dp))
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth(),
@@ -187,8 +190,7 @@ fun ForgotPasswordScreen(nav: NavController) {
 
                     // ── Step 2: Set new master password ─────────────────────────
                     2 -> {
-                        val entropy = PasswordGenerator.entropy(newPassword)
-                        val strong = entropy >= 60
+                        val strong = isPasswordStrong(newPassword)
                         val match = newPassword == confirmPassword && newPassword.isNotEmpty()
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -225,26 +227,8 @@ fun ForgotPasswordScreen(nav: NavController) {
                                 },
                             )
 
-                            // Strength meter
-                            val meterColor = when {
-                                entropy >= 60 -> Mint; entropy >= 40 -> Amber; else -> Coral
-                            }
                             Spacer(Modifier.height(6.dp))
-                            LinearProgressIndicator(
-                                progress = { (entropy / 100.0).toFloat().coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth().height(6.dp),
-                                color = meterColor, trackColor = Surface2,
-                            )
-                            Text(
-                                when {
-                                    newPassword.isEmpty() -> " "
-                                    entropy >= 60 -> "Strong"
-                                    entropy >= 40 -> "Okay — longer is better"
-                                    else -> "Too weak"
-                                },
-                                style = MaterialTheme.typography.labelMedium, color = meterColor,
-                                modifier = Modifier.align(Alignment.Start),
-                            )
+                            PasswordStrengthMeter(newPassword)
 
                             Spacer(Modifier.height(10.dp))
                             VaultTextField(
@@ -310,5 +294,6 @@ fun ForgotPasswordScreen(nav: NavController) {
                 }
             }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }

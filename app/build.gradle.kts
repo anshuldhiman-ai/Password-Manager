@@ -63,14 +63,17 @@ android {
             )
         }
     }
+    // Disabled APK splits - producing single universal APK for Android 9+
+    // This ensures compatibility across all devices without requiring multiple APKs
+    /*
     splits {
         abi {
             isEnable = true
             isUniversalApk = true
-            // Only package the architectures likely in use — drops x86/x86_64 (~20 MB)
             include("arm64-v8a", "armeabi-v7a")
         }
     }
+    */
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
