@@ -12,8 +12,8 @@ android {
         applicationId = "com.family.pswdmngr"
         minSdk = 28 // Android 9
         targetSdk = 34
-        versionCode = 9
-        versionName = "8.1.0"
+        versionCode = 10
+        versionName = "10.0.0"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }
     }

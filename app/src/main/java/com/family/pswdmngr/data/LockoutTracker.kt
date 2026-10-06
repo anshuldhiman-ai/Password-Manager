@@ -61,6 +61,14 @@ object LockoutTracker {
             .apply()
     }
 
+    /** Full reset (counter + timestamps) — used by vault wipe. */
+    fun reset(ctx: Context) {
+        prefs(ctx).edit()
+            .putInt(KEY_COUNT, 0)
+            .putLong(KEY_LAST_FAIL, 0L)
+            .apply()
+    }
+
     /**
      * Remaining lockout time in milliseconds.
      * Returns 0 if the user can attempt unlock again now.

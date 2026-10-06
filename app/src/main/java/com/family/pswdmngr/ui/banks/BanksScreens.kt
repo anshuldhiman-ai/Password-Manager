@@ -25,7 +25,9 @@ import com.family.pswdmngr.ui.cards.bankBrand
 import com.family.pswdmngr.ui.cards.horizontalScrollRow
 import com.family.pswdmngr.ui.screens.*
 import com.family.pswdmngr.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -209,10 +211,13 @@ fun BankDetailScreen(nav: NavController, id: Long) {
             onDismissRequest = { confirmDelete = false },
             containerColor = Surface1,
             title = { Text("Delete this bank account?", color = TextPrimary) },
-            text = { Text("This cannot be undone.", color = TextSecondary) },
+            text = { Text("It moves to the recycle bin for 30 days.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch { VaultSession.bankDao().delete(b); nav.popBackStack() }
+                    scope.launch {
+                        withContext(Dispatchers.IO) { b.deleteToTrash(ctx) }
+                        nav.popBackStack()
+                    }
                 }) { Text("Delete", color = Coral) }
             },
             dismissButton = {
@@ -333,7 +338,7 @@ fun EditBankScreen(nav: NavController, id: Long) {
             item {
                 CustomFieldsEditor(
                     fields, onChange = { fields = it },
-                    suggestions = listOf("SBI Rewardz password", "Debit card annual fee", "Nominee", "Locker no", "Cheque book series"),
+                    suggestions = listOf("Customer ID", "Debit card PIN", "Nominee", "Branch code", "Registered mobile"),
                 )
             }
 

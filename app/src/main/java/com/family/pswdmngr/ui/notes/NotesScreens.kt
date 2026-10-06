@@ -17,14 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.family.pswdmngr.data.NoteEntry
 import com.family.pswdmngr.data.VaultSession
+import com.family.pswdmngr.data.deleteToTrash
 import com.family.pswdmngr.ui.screens.*
 import com.family.pswdmngr.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Keep-style tinted note cards; everything lives inside the encrypted vault.
@@ -128,6 +132,7 @@ fun NotesScreen(nav: NavController) {
 @Composable
 fun EditNoteScreen(nav: NavController, id: Long) {
     if (!VaultSession.isUnlocked) return
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var loaded by remember { mutableStateOf(id == -1L) }
     var original by remember { mutableStateOf<NoteEntry?>(null) }
@@ -240,10 +245,13 @@ fun EditNoteScreen(nav: NavController, id: Long) {
             onDismissRequest = { confirmDelete = false },
             containerColor = Surface1,
             title = { Text("Delete this note?", color = TextPrimary) },
+            text = { Text("It moves to the recycle bin for 30 days.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        original?.let { VaultSession.noteDao().delete(it) }
+                        original?.let {
+                            withContext(Dispatchers.IO) { it.deleteToTrash(ctx) }
+                        }
                         nav.popBackStack()
                     }
                 }) { Text("Delete", color = Coral) }

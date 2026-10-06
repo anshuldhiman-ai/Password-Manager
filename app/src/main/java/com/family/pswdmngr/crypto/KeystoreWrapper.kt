@@ -31,25 +31,27 @@ class KeystoreWrapper(context: Context) {
         null
     }
 
-    private fun getOrCreateKey(): SecretKey? = try {
-        val ks = keystore() ?: return null
-        ks.getKey(ALIAS, null)?.let { return it as? SecretKey }
-        val spec = KeyGenParameterSpec.Builder(
-            ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-            // Android 9-10 API: auth valid briefly so we can use the key right after prompt
-            .setUserAuthenticationValidityDurationSeconds(10)
-            .setInvalidatedByBiometricEnrollment(true)
-            .build()
-        KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
-        ).apply { init(spec) }.generateKey()
-    } catch (_: Throwable) {
-        null
+    private fun getOrCreateKey(): SecretKey? {
+        return try {
+            val ks = keystore() ?: return null
+            ks.getKey(ALIAS, null)?.let { return it as? SecretKey }
+            val spec = KeyGenParameterSpec.Builder(
+                ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .setUserAuthenticationRequired(true)
+                // Android 9-10 API: auth valid briefly so we can use the key right after prompt
+                .setUserAuthenticationValidityDurationSeconds(10)
+                .setInvalidatedByBiometricEnrollment(true)
+                .build()
+            KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+            ).apply { init(spec) }.generateKey()
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     val isEnabled: Boolean get() = try { prefs.contains(PREF_BLOB) } catch (_: Throwable) { false }

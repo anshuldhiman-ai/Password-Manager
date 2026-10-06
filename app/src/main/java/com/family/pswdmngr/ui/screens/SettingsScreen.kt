@@ -52,6 +52,9 @@ fun SettingsScreen(nav: NavController) {
     var wipeEnabled by remember { mutableStateOf(LockoutTracker.wipeEnabled(ctx)) }
     var recoveryKeyDialog by remember { mutableStateOf(false) }
     var recoveredKey by remember { mutableStateOf<String?>(null) }
+    var showMasterPwGate by remember { mutableStateOf(false) }
+    var masterPwInput by remember { mutableStateOf("") }
+    var masterPwError by remember { mutableStateOf(false) }
     var backupDialog by remember { mutableStateOf<String?>(null) } // "export" | "import" | "selective"
     var backupPassword by remember { mutableStateOf("") }
     var backupPassword2 by remember { mutableStateOf("") }
@@ -306,9 +309,11 @@ fun SettingsScreen(nav: NavController) {
                                     .build()
                             )
                         } else {
-                            // Fallback: try password verification
-                            recoveredKey = VaultSession.getRecoveryKey(ctx)
-                            if (recoveredKey != null) recoveryKeyDialog = true
+                            // No biometric available — the recovery key is the
+                            // master key of the vault, so it must never be shown
+                            // without authentication. Fall back to re-entering
+                            // the master password instead of skipping the check.
+                            showMasterPwGate = true
                         }
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -562,6 +567,85 @@ fun SettingsScreen(nav: NavController) {
             recoveryKey = recoveredKey!!,
             onDismiss = { recoveryKeyDialog = false },
             snackbar = snackbar,
+        )
+    }
+
+    // Gate: show the recovery key only after the master password is
+    // re-entered — used when biometric is unavailable, so the key is
+    // never revealed with zero authentication.
+    if (showMasterPwGate) {
+        AlertDialog(
+            onDismissRequest = { showMasterPwGate = false; masterPwInput = ""; masterPwError = false },
+            containerColor = Surface1,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Lock, null, tint = Cyan, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Confirm master password", color = TextPrimary)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "No biometric enrolled. Enter your master password to reveal the recovery key.",
+                        color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    VaultTextField(
+                        masterPwInput,
+                        { masterPwInput = it; masterPwError = false },
+                        "Master password",
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                if (masterPwInput.isNotEmpty()) {
+                                    val pw = masterPwInput.toCharArray()
+                                    if (VaultSession.verifyPassword(ctx, pw)) {
+                                        showMasterPwGate = false
+                                        masterPwInput = ""
+                                        masterPwError = false
+                                        recoveredKey = VaultSession.getRecoveryKey(ctx)
+                                        recoveryKeyDialog = recoveredKey != null
+                                    } else {
+                                        masterPwError = true
+                                    }
+                                }
+                            }
+                        ),
+                    )
+                    if (masterPwError) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Incorrect master password", color = Coral,
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = masterPwInput.isNotEmpty(),
+                    onClick = {
+                        val pw = masterPwInput.toCharArray()
+                        if (VaultSession.verifyPassword(ctx, pw)) {
+                            showMasterPwGate = false
+                            masterPwInput = ""
+                            masterPwError = false
+                            recoveredKey = VaultSession.getRecoveryKey(ctx)
+                            recoveryKeyDialog = recoveredKey != null
+                        } else {
+                            masterPwError = true
+                        }
+                    },
+                ) { Text("Unlock", color = Cyan) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMasterPwGate = false; masterPwInput = ""; masterPwError = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
         )
     }
 }

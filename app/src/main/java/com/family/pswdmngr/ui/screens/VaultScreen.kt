@@ -329,6 +329,7 @@ private fun EntryBadge(entry: com.family.pswdmngr.data.VaultEntry) {
         ) { com.family.pswdmngr.ui.cards.GoogleLogo(size = 24.dp) }
         bankKey != null ->
             com.family.pswdmngr.ui.cards.BankLogoChip(bankKey, entry.title, size = 46.dp)
+        com.family.pswdmngr.ui.cards.PlatformLogo(hint) -> Unit
         else -> IconBadge(categoryIcon(entry.category), categoryColor(entry.category))
     }
 }

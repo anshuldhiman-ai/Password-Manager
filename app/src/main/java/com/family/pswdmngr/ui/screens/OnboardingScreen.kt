@@ -1,5 +1,6 @@
 package com.family.pswdmngr.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,6 +44,27 @@ fun OnboardingScreen(nav: NavController) {
     val passwordFocus = remember { FocusRequester() }
     val confirmFocus = remember { FocusRequester() }
 
+    // Premium staggered entrance: badge → heading → chips → fields
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(60)
+        entered = true
+    }
+    val badgeScale by animateFloatAsState(
+        if (entered) 1f else 0.6f,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "onboardBadge",
+    )
+    val headingAlpha by animateFloatAsState(
+        if (entered) 1f else 0f, tween(500, delayMillis = 120), label = "onboardHeading",
+    )
+    val chipsAlpha by animateFloatAsState(
+        if (entered) 1f else 0f, tween(500, delayMillis = 240), label = "onboardChips",
+    )
+    val fieldsAlpha by animateFloatAsState(
+        if (entered) 1f else 0f, tween(500, delayMillis = 340), label = "onboardFields",
+    )
+
     val validLength = password.length >= 8
     val match = password == confirm && password.isNotEmpty()
     val canProceed = validLength && match && !working
@@ -50,8 +73,8 @@ fun OnboardingScreen(nav: NavController) {
         modifier = Modifier.background(HeroGradient),
     ) {
         Spacer(Modifier.height(16.dp))
-        
-        AppLogoBadge(size = 80.dp)
+
+        AppLogoBadge(size = 80.dp, glow = badgeScale)
 
         Spacer(Modifier.height(18.dp))
         Text(
@@ -59,6 +82,7 @@ fun OnboardingScreen(nav: NavController) {
             style = MaterialTheme.typography.headlineSmall,
             color = TextPrimary,
             textAlign = TextAlign.Center,
+            modifier = Modifier.graphicsLayer { alpha = headingAlpha },
         )
         Spacer(Modifier.height(6.dp))
         Text(
@@ -66,13 +90,16 @@ fun OnboardingScreen(nav: NavController) {
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary,
             textAlign = TextAlign.Center,
+            modifier = Modifier.graphicsLayer { alpha = headingAlpha },
         )
-        
+
         Spacer(Modifier.height(24.dp))
 
         // Security reassurance chips
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = chipsAlpha },
             horizontalArrangement = Arrangement.Center,
         ) {
             Surface(
@@ -97,6 +124,7 @@ fun OnboardingScreen(nav: NavController) {
 
         Spacer(Modifier.height(24.dp))
 
+        Column(Modifier.graphicsLayer { alpha = fieldsAlpha }) {
         VaultTextField(
             value = password,
             onValueChange = { password = it },
@@ -211,6 +239,8 @@ fun OnboardingScreen(nav: NavController) {
                 }
             }
         }
+        }
+
         Spacer(Modifier.height(28.dp))
     }
 }

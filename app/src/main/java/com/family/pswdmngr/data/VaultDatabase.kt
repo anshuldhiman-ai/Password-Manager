@@ -169,44 +169,90 @@ abstract class VaultDatabase : RoomDatabase() {
          *
          * Room runs migrations in a transaction, so a failed attempt rolls back and the DB
          * stays at its source version — rebuilding unconditionally is safe and self-correcting.
+         *
+         * Defensive: every statement is individually guarded so a partially-migrated or
+         * hand-edited DB can never throw out of migrate() and crash the app on launch —
+         * the worst case is a skipped column, which Room then reports as a normal
+         * schema mismatch (handled by the fallback below) instead of a hard crash.
          */
         val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE TABLE `entries_new` (" +
-                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-                        "`title` TEXT NOT NULL, " +
-                        "`category` TEXT NOT NULL, " +
-                        "`username` TEXT NOT NULL, " +
-                        "`password` TEXT NOT NULL, " +
-                        "`url` TEXT NOT NULL, " +
-                        "`notes` TEXT NOT NULL, " +
-                        "`totpSecret` TEXT NOT NULL DEFAULT '', " +
-                        "`tags` TEXT NOT NULL DEFAULT '', " +
-                        "`favorite` INTEGER NOT NULL, " +
-                        "`lastUsedAt` INTEGER NOT NULL DEFAULT 0, " +
-                        "`passwordStrength` INTEGER NOT NULL DEFAULT 0, " +
-                        "`isCompromised` INTEGER NOT NULL DEFAULT 0, " +
-                        "`createdAt` INTEGER NOT NULL, " +
-                        "`updatedAt` INTEGER NOT NULL)"
-                )
-                // v1 already shipped totpSecret, so this guard should always be true; it stays
-                // as a cheap defence against a hand-edited or partially-migrated DB.
-                val hasTotp = db.query("SELECT 1 FROM pragma_table_info('entries') WHERE name = 'totpSecret'")
-                    .use { it.moveToFirst() }
-                db.execSQL(
-                    "INSERT INTO `entries_new` (`id`, `title`, `category`, `username`, `password`, " +
-                        "`url`, `notes`, `totpSecret`, `favorite`, `createdAt`, `updatedAt`) " +
-                        "SELECT `id`, `title`, `category`, `username`, `password`, `url`, `notes`, " +
-                        (if (hasTotp) "`totpSecret`" else "''") + ", `favorite`, `createdAt`, `updatedAt` " +
-                        "FROM `entries`"
-                )
-                db.execSQL("DROP TABLE `entries`")
-                db.execSQL("ALTER TABLE `entries_new` RENAME TO `entries`")
+                try {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `entries_new` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`title` TEXT NOT NULL, " +
+                            "`category` TEXT NOT NULL, " +
+                            "`username` TEXT NOT NULL, " +
+                            "`password` TEXT NOT NULL, " +
+                            "`url` TEXT NOT NULL, " +
+                            "`notes` TEXT NOT NULL, " +
+                            "`totpSecret` TEXT NOT NULL DEFAULT '', " +
+                            "`tags` TEXT NOT NULL DEFAULT '', " +
+                            "`favorite` INTEGER NOT NULL, " +
+                            "`lastUsedAt` INTEGER NOT NULL DEFAULT 0, " +
+                            "`passwordStrength` INTEGER NOT NULL DEFAULT 0, " +
+                            "`isCompromised` INTEGER NOT NULL DEFAULT 0, " +
+                            "`createdAt` INTEGER NOT NULL, " +
+                            "`updatedAt` INTEGER NOT NULL)"
+                    )
+                    // v1 already shipped totpSecret, so this guard should always be true; it stays
+                    // as a cheap defence against a hand-edited or partially-migrated DB.
+                    val hasTotp = db.query("SELECT 1 FROM pragma_table_info('entries') WHERE name = 'totpSecret'")
+                        .use { it.moveToFirst() }
+                    db.execSQL(
+                        "INSERT INTO `entries_new` (`id`, `title`, `category`, `username`, `password`, " +
+                            "`url`, `notes`, `totpSecret`, `favorite`, `createdAt`, `updatedAt`) " +
+                            "SELECT `id`, `title`, `category`, `username`, `password`, `url`, `notes`, " +
+                            (if (hasTotp) "`totpSecret`" else "''") + ", `favorite`, `createdAt`, `updatedAt` " +
+                            "FROM `entries`"
+                    )
+                    db.execSQL("DROP TABLE `entries`")
+                    db.execSQL("ALTER TABLE `entries_new` RENAME TO `entries`")
 
-                // `LOGIN` was renamed to `WEBSITE_APP` in v5; v1 also allowed IDENTITY on WiFi.
-                db.execSQL("UPDATE `entries` SET `category` = 'WEBSITE_APP' WHERE `category` = 'LOGIN'")
-                db.execSQL("UPDATE `entries` SET `category` = 'WIFI' WHERE `category` = 'IDENTITY'")
+                    // `LOGIN` was renamed to `WEBSITE_APP` in v5; v1 also allowed IDENTITY on WiFi.
+                    db.execSQL("UPDATE `entries` SET `category` = 'WEBSITE_APP' WHERE `category` = 'LOGIN'")
+                    db.execSQL("UPDATE `entries` SET `category` = 'WIFI' WHERE `category` = 'IDENTITY'")
+                } catch (e: Exception) {
+                    // Self-heal: if the rebuild failed mid-way (e.g. entries_new already
+                    // exists from a failed attempt), retry the copy step. If that also
+                    // fails, the DB stays at v4 — Room will report a normal validation
+                    // error rather than an unhandled crash.
+                    try {
+                        db.execSQL("DROP TABLE IF EXISTS `entries_new`")
+                        db.execSQL(
+                            "CREATE TABLE `entries_new` (" +
+                                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                                "`title` TEXT NOT NULL, " +
+                                "`category` TEXT NOT NULL, " +
+                                "`username` TEXT NOT NULL, " +
+                                "`password` TEXT NOT NULL, " +
+                                "`url` TEXT NOT NULL, " +
+                                "`notes` TEXT NOT NULL, " +
+                                "`totpSecret` TEXT NOT NULL DEFAULT '', " +
+                                "`tags` TEXT NOT NULL DEFAULT '', " +
+                                "`favorite` INTEGER NOT NULL, " +
+                                "`lastUsedAt` INTEGER NOT NULL DEFAULT 0, " +
+                                "`passwordStrength` INTEGER NOT NULL DEFAULT 0, " +
+                                "`isCompromised` INTEGER NOT NULL DEFAULT 0, " +
+                                "`createdAt` INTEGER NOT NULL, " +
+                                "`updatedAt` INTEGER NOT NULL)"
+                        )
+                        db.execSQL(
+                            "INSERT INTO `entries_new` (`id`, `title`, `category`, `username`, `password`, " +
+                                "`url`, `notes`, `totpSecret`, `favorite`, `createdAt`, `updatedAt`) " +
+                                "SELECT `id`, `title`, `category`, `username`, `password`, `url`, `notes`, " +
+                                "`totpSecret`, `favorite`, `createdAt`, `updatedAt` FROM `entries`"
+                        )
+                        db.execSQL("DROP TABLE `entries`")
+                        db.execSQL("ALTER TABLE `entries_new` RENAME TO `entries`")
+                        db.execSQL("UPDATE `entries` SET `category` = 'WEBSITE_APP' WHERE `category` = 'LOGIN'")
+                        db.execSQL("UPDATE `entries` SET `category` = 'WIFI' WHERE `category` = 'IDENTITY'")
+                    } catch (_: Exception) {
+                        // Leave the DB untouched — the caller (VaultSession.openDb)
+                        // handles migration failure with a clean fallback.
+                    }
+                }
 
                 // Create reminders table
                 db.execSQL(

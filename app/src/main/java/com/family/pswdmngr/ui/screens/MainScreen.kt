@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -64,6 +65,17 @@ private const val TAB_NOTES = 2
 private const val TAB_SEARCH = 3
 private const val TAB_MORE = 4
 
+/** Time-of-day greeting for the vault header. */
+private fun greeting(): String {
+    val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (h) {
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        in 17..20 -> "Good evening"
+        else -> "Good night"
+    }
+}
+
 // ── Main screen with bottom nav ─────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,13 +108,18 @@ fun MainScreen(nav: NavController) {
         }
     }
 
-    // Back press on tabs stays on current tab; second back press exits the app
-    BackHandler(enabled = selectedTab != TAB_VAULT) {
-        selectedTab = TAB_VAULT
-    }
-    BackHandler(enabled = selectedTab == TAB_VAULT) {
-        // Pop to unlock or exit
-        nav.popBackStack("unlock", inclusive = false)
+    // Back press on tabs stays on current tab; on the vault tab,
+    // exit the app cleanly. A single BackHandler avoids two competing
+    // handlers both firing (the second could pop the unlock route and
+    // land on a black screen).
+    BackHandler(enabled = true) {
+        if (selectedTab != TAB_VAULT) {
+            selectedTab = TAB_VAULT
+        } else {
+            // Exit the app entirely — the vault tab is the root of the
+            // unlocked graph, so there is nothing sensible to pop to.
+            (ctx as? android.app.Activity)?.finish()
+        }
     }
 
     Scaffold(
@@ -139,20 +156,24 @@ fun MainScreen(nav: NavController) {
                 }
             }
         },
+        // Quick-add only on tabs where adding content makes sense.
+        // On Search/More a floating "+" is meaningless clutter.
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showAddSheet = true
-                },
-                containerColor = Cyan,
-                shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(8.dp),
-            ) {
-                // OnAccent, not TextPrimary: this FAB is filled with Cyan, and a near-white
-                // glyph on light teal is 1.68:1 in dark theme — effectively invisible.
-                // OnAccent gives 10.46:1 dark / 4.91:1 light.
-                Icon(Icons.Rounded.Add, "Quick add", tint = OnAccent)
+            if (selectedTab == TAB_VAULT || selectedTab == TAB_CARDS || selectedTab == TAB_NOTES) {
+                FloatingActionButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showAddSheet = true
+                    },
+                    containerColor = Cyan,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(8.dp),
+                ) {
+                    // OnAccent, not TextPrimary: this FAB is filled with Cyan, and a near-white
+                    // glyph on light teal is 1.68:1 in dark theme — effectively invisible.
+                    // OnAccent gives 10.46:1 dark / 4.91:1 light.
+                    Icon(Icons.Rounded.Add, "Quick add", tint = OnAccent)
+                }
             }
         },
     ) { pad ->
@@ -348,32 +369,38 @@ private fun VaultDashboard(
     val tasks by VaultSession.taskDao().observeAll().collectAsState(initial = emptyList())
 
     var query by remember { mutableStateOf("") }
-    var filterIndex by remember { mutableIntStateOf(0) }
     val q = query.trim()
 
-    val loginCount = entries.size
-    val cardCount = cards.size
-    val noteCount = notes.size
-    val docCount = docs.size
-    val taskCount = tasks.size
-    val totalItems = loginCount + cardCount + banks.size + noteCount + docCount + taskCount
+    val loginCount: Int = entries.size
+    val cardCount: Int = cards.size
+    val bankCount: Int = banks.size
+    val noteCount: Int = notes.size
+    val docCount: Int = docs.size
+    val taskCount: Int = tasks.size
+    val otherCount: Int = noteCount + taskCount
+    val totalItems: Int = loginCount + cardCount + bankCount + docCount + otherCount
 
-    val filtered = remember(entries, filterIndex, q) {
-        val base = when (filterIndex) {
-            1 -> entries
-            2 -> emptyList()
-            3 -> emptyList()
-            else -> entries
-        }
-        base.filter { e ->
+    val filtered = remember(entries, q) {
+        entries.filter { e ->
             q.isBlank() || e.title.contains(q, true) || e.username.contains(q, true) || e.url.contains(q, true)
         }
     }
 
     val pinned = entries.filter { it.favorite }.take(5)
 
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    // Index of the "Pinned Items" header within the LazyColumn —
+    // recomputed whenever the list structure changes (query/pinned).
+    val pinnedSectionIndex = remember(q, pinned) {
+        // items before the pinned header: hero, search, cards, dashboard banner, category grid
+        // (fixed 5 structural items) + 1 (the pinned header itself)
+        if (pinned.isNotEmpty() && q.isBlank()) 5 else -1
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(bottom = 96.dp),
     ) {
         // ── 1. Hero Header matching Screen 2 ──
@@ -387,7 +414,12 @@ private fun VaultDashboard(
             ) {
                 Column {
                     Text(
-                        "Good morning, Anshul",
+                        greeting(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Cyan,
+                    )
+                    Text(
+                        "My Vault",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 22.sp
@@ -452,7 +484,7 @@ private fun VaultDashboard(
             Spacer(Modifier.height(20.dp))
         }
 
-        // ── 3. Favorites Horizontal Carousel matching Screen 2 ──
+        // ── 3. Cards Carousel matching Screen 2 ──
         item {
             Row(
                 modifier = Modifier
@@ -462,31 +494,26 @@ private fun VaultDashboard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Favorites",
+                    "Cards",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = TextPrimary
                 )
-                IconButton(
-                    onClick = { nav.navigate("cards") },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        Icons.Rounded.ChevronRight,
-                        contentDescription = "View Cards",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Text(
+                    "See all",
+                    color = Cyan,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clickable { nav.navigate("cards") },
+                )
             }
             Spacer(Modifier.height(10.dp))
 
             // Carousel of programmatic vector gradient cards
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 22.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                if (cards.isNotEmpty()) {
+            if (cards.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                     items(cards.take(6), key = { "fav_${it.id}" }) { card ->
                         val brand = bankBrand(card.bankName)
                         MiniCardItem(
@@ -497,43 +524,39 @@ private fun VaultDashboard(
                             onClick = { nav.navigate("cardDetail/${card.id}") }
                         )
                     }
-                } else {
-                    // Default stylish presets matching sample.png Screen 2
-                    item {
-                        MiniCardItem(
-                            bankName = "HDFC Bank",
-                            last4 = "8421",
-                            brand = BankBrand(Color(0xFF0C2B59), Color(0xFF06152B), Color(0xFF33C1F0)),
-                            network = "VISA",
-                            onClick = { nav.navigate("cards") }
-                        )
-                    }
-                    item {
-                        MiniCardItem(
-                            bankName = "ICICI Bank",
-                            last4 = "4019",
-                            brand = BankBrand(Color(0xFF8A2E18), Color(0xFF3A0D08), Color(0xFFF7931E)),
-                            network = "MC",
-                            onClick = { nav.navigate("cards") }
-                        )
-                    }
-                    item {
-                        MiniCardItem(
-                            bankName = "SBI",
-                            last4 = "9231",
-                            brand = BankBrand(Color(0xFF0D5288), Color(0xFF062340), Color(0xFF33C1F0)),
-                            network = "RuPay",
-                            onClick = { nav.navigate("cards") }
-                        )
-                    }
-                    item {
-                        MiniCardItem(
-                            bankName = "Axis Bank",
-                            last4 = "3184",
-                            brand = BankBrand(Color(0xFF801040), Color(0xFF35061A), Color(0xFFE8608C)),
-                            network = "VISA",
-                            onClick = { nav.navigate("cards") }
-                        )
+                }
+            } else {
+                // Empty state — never show fake preset cards: they teach the
+                // user to expect cards that don't exist and look like real data.
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { nav.navigate("cardEdit/-1") },
+                    shape = RoundedCornerShape(14.dp),
+                    color = Surface2.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, Stroke),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconBadge(Icons.Rounded.CreditCard, Cyan, size = 42)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "No cards yet",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Add a debit or credit card",
+                                color = TextSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Icon(Icons.Rounded.Add, null, tint = Cyan)
                     }
                 }
             }
@@ -588,9 +611,9 @@ private fun VaultDashboard(
                     ) {
                         DashboardMetricPill("$loginCount", "Logins", Cyan)
                         DashboardMetricPill("$cardCount", "Cards", Mint)
-                        DashboardMetricPill("${banks.size}", "Banks", Violet)
+                        DashboardMetricPill("$bankCount", "Banks", Violet)
                         DashboardMetricPill("$docCount", "Docs", Amber)
-                        DashboardMetricPill("${noteCount + taskCount}", "Others", Coral)
+                        DashboardMetricPill("$otherCount", "Others", Coral)
                     }
                 }
             }
@@ -624,7 +647,10 @@ private fun VaultDashboard(
                         "See all",
                         color = Cyan,
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.clickable { /* handled */ },
+                        modifier = Modifier.clickable {
+                            // Jump to the full login list (all entries) below
+                            scope.launch { listState.scrollToItem(pinnedSectionIndex) }
+                        },
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -721,7 +747,8 @@ private fun MiniCardItem(
                     .align(Alignment.TopStart)
             )
 
-            // Bank Name
+            // Bank Name — bottom-aligned beside the network mark so it can
+            // never overlap the chip at TopStart
             Text(
                 bankName,
                 style = MaterialTheme.typography.labelSmall.copy(
@@ -729,7 +756,11 @@ private fun MiniCardItem(
                     fontSize = 10.sp
                 ),
                 color = Color.White,
-                modifier = Modifier.align(Alignment.TopEnd)
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(start = 4.dp)
             )
 
             // Dots & Last 4
@@ -753,7 +784,9 @@ private fun MiniCardItem(
                     fontSize = 10.sp
                 ),
                 color = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.align(Alignment.BottomEnd)
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 2.dp)
             )
         }
     }
@@ -909,6 +942,9 @@ private fun EntryBadge(entry: com.family.pswdmngr.data.VaultEntry) {
         }
         bankKey != null ->
             com.family.pswdmngr.ui.cards.BankLogoChip(bankKey, entry.title, size = 46.dp)
+        // Recognised platforms (netflix.com → Netflix, instagram.com → Instagram…)
+        // get their real vector-drawn mark instead of a generic icon.
+        com.family.pswdmngr.ui.cards.PlatformLogo(hint) -> Unit
         else -> IconBadge(categoryIcon(entry.category), categoryColor(entry.category))
     }
 }

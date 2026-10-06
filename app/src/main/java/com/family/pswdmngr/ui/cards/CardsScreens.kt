@@ -27,7 +27,9 @@ import com.family.pswdmngr.VaultApp
 import com.family.pswdmngr.data.*
 import com.family.pswdmngr.ui.screens.*
 import com.family.pswdmngr.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /* ================= Cards list, grouped by bank ================= */
 
@@ -226,11 +228,11 @@ fun CardDetailScreen(nav: NavController, id: Long) {
             onDismissRequest = { confirmDelete = false },
             containerColor = Surface1,
             title = { Text("Delete this card?", color = TextPrimary) },
-            text = { Text("This cannot be undone.", color = TextSecondary) },
+            text = { Text("It moves to the recycle bin for 30 days.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        VaultSession.cardDao().delete(c)
+                        withContext(Dispatchers.IO) { c.deleteToTrash(ctx) }
                         nav.popBackStack()
                     }
                 }) { Text("Delete", color = Coral) }

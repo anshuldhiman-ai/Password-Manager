@@ -54,11 +54,16 @@ import java.io.FileOutputStream
 @Composable
 fun RecoveryKeyScreen(nav: NavController) {
     val ctx = LocalContext.current
+    // The recovery key must come from a real source: the pending
+    // migration value, or the stored encrypted blob (requires the
+    // vault to be unlocked). Never fabricate a placeholder — a fake
+    // key would be indistinguishable from a real one and would give
+    // the user false confidence their vault is backed up.
     val recoveryKey = remember {
-        VaultSession.pendingRecoveryKey ?: VaultSession.getRecoveryKey(ctx) ?: "VAULT-RECOVERY-KEY"
+        VaultSession.pendingRecoveryKey ?: VaultSession.getRecoveryKey(ctx)
     }
 
-    var isRevealed by remember { mutableStateOf(false) }
+    var isRevealed by remember { mutableStateOf(true) }
     var showQr by remember { mutableStateOf(false) }
     var showPrintCard by remember { mutableStateOf(false) }
 
@@ -70,12 +75,50 @@ fun RecoveryKeyScreen(nav: NavController) {
         }
     }
 
+    // No key available (e.g. deep-link into this screen outside onboarding)
+    // — show an explanatory empty state instead of a blank or fake key.
+    if (recoveryKey == null) {
+        AuthScrollColumn(
+            modifier = Modifier.background(HeroGradient),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.Key, null, tint = Amber,
+                        modifier = Modifier.size(56.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "No recovery key",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "A recovery key is created when you set up your vault.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    AccentButton("Back", icon = Icons.AutoMirrored.Rounded.ArrowBack) {
+                        nav.popBackStack()
+                    }
+                }
+            }
+        }
+        return
+    }
+
     fun copyToClipboard() {
         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("Recovery Key", recoveryKey))
         Toast.makeText(ctx, "Recovery key copied to clipboard", Toast.LENGTH_SHORT).show()
     }
-
     fun shareKey() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"

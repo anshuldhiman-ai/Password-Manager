@@ -28,6 +28,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.family.pswdmngr.VaultApp
 import com.family.pswdmngr.data.*
+import com.family.pswdmngr.data.deleteToTrash
 import com.family.pswdmngr.ui.cards.CustomFieldsEditor
 import com.family.pswdmngr.ui.cards.SecretRow
 import com.family.pswdmngr.ui.cards.horizontalScrollRow
@@ -336,12 +337,11 @@ fun DocDetailScreen(nav: NavController, id: Long) {
             onDismissRequest = { confirmDelete = false },
             containerColor = Surface1,
             title = { Text("Delete this document?", color = TextPrimary) },
-            text = { Text("The record and all its encrypted files will be removed.", color = TextSecondary) },
+            text = { Text("It and its files move to the recycle bin for 30 days.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        withContext(Dispatchers.IO) { AttachmentStore.deleteForOwner(ctx, "DOC", d.id) }
-                        VaultSession.docDao().delete(d)
+                        withContext(Dispatchers.IO) { d.deleteToTrash(ctx) }
                         nav.popBackStack()
                     }
                 }) { Text("Delete", color = Coral) }

@@ -2,8 +2,10 @@ package com.family.pswdmngr.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -11,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -20,9 +24,12 @@ import com.family.pswdmngr.crypto.PasswordGenerator
 import com.family.pswdmngr.crypto.Totp
 import com.family.pswdmngr.data.VaultEntry
 import com.family.pswdmngr.data.VaultSession
+import com.family.pswdmngr.data.deleteToTrash
 import com.family.pswdmngr.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,7 +88,24 @@ fun EntryScreen(nav: NavController, id: Long) {
         ) {
             item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    IconBadge(categoryIcon(e.category), categoryColor(e.category), size = 72)
+                    val hint = (e.title + " " + e.url + " " + e.username).lowercase()
+                    val bankKey = com.family.pswdmngr.ui.cards.CardCatalog.bankKeyFor(hint)
+                    val google = "google" in hint || "gmail" in hint || e.username.endsWith("@gmail.com", true)
+                    val shown = when {
+                        google -> {
+                            Box(
+                                Modifier.size(72.dp).clip(CircleShape).background(Color.White),
+                                contentAlignment = Alignment.Center,
+                            ) { com.family.pswdmngr.ui.cards.GoogleLogo(size = 36.dp) }
+                            true
+                        }
+                        bankKey != null -> {
+                            com.family.pswdmngr.ui.cards.BankLogoChip(bankKey, e.title, size = 72.dp)
+                            true
+                        }
+                        else -> com.family.pswdmngr.ui.cards.PlatformLogo(hint, size = 72.dp)
+                    }
+                    if (!shown) IconBadge(categoryIcon(e.category), categoryColor(e.category), size = 72)
                     Spacer(Modifier.height(12.dp))
                     Text(e.title, style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
                     if (e.url.isNotBlank()) {
@@ -148,11 +172,11 @@ fun EntryScreen(nav: NavController, id: Long) {
             onDismissRequest = { confirmDelete = false },
             containerColor = Surface1,
             title = { Text("Delete \"${e.title}\"?", color = TextPrimary) },
-            text = { Text("This cannot be undone.", color = TextSecondary) },
+            text = { Text("It moves to the recycle bin for 30 days.", color = TextSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        VaultSession.dao().delete(e)
+                        withContext(Dispatchers.IO) { e.deleteToTrash(ctx) }
                         nav.popBackStack()
                     }
                 }) { Text("Delete", color = Coral) }

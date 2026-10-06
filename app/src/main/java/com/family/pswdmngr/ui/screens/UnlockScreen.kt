@@ -148,10 +148,16 @@ fun UnlockScreen(nav: NavController) {
         val shouldWipe = try { LockoutTracker.recordFailedAttempt(ctx) } catch (_: Throwable) { false }
         failCount = try { LockoutTracker.failCount(ctx) } catch (_: Throwable) { 0 }
         if (shouldWipe) {
-            VaultSession.lock()
-            nav.navigate("unlock") { popUpTo(0) { inclusive = true } }
-            // TODO: delete vault.db and reset SharedPreferences for actual vault wipe
-            error = "Vault has been wiped due to 10 failed unlock attempts."
+            scope.launch {
+                // Actually delete the encrypted DB + vault metadata — the wipe
+                // setting is a promise that 10 failures destroy the vault.
+                try {
+                    VaultSession.wipeVault(ctx)
+                } catch (_: Throwable) {}
+                VaultSession.lock()
+                nav.navigate("unlock") { popUpTo(0) { inclusive = true } }
+                error = "Vault wiped after 10 failed attempts."
+            }
             return
         }
         lockoutMs = try { LockoutTracker.remainingLockoutMs(ctx) } catch (_: Throwable) { 0L }
@@ -180,9 +186,16 @@ fun UnlockScreen(nav: NavController) {
         prompt.authenticate(info.build())
     }
 
-    // Auto-trigger biometric if available (and device not rooted)
+    // Auto-trigger biometric once per appearance — but only if the user
+    // hasn't explicitly asked for the password form. After a cancelled
+    // prompt we set showPasswordForm = true so we don't re-fire and trap
+    // the user in a prompt loop with no way to type the password.
+    var bioPromptFired by remember { mutableStateOf(false) }
     LaunchedEffect(bioAvailable) {
-        if (bioAvailable && !showPasswordForm) biometricUnlock()
+        if (bioAvailable && !showPasswordForm && !bioPromptFired) {
+            bioPromptFired = true
+            biometricUnlock()
+        }
     }
 
     val exitScale by animateFloatAsState(
@@ -198,10 +211,10 @@ fun UnlockScreen(nav: NavController) {
             delay(1000)
         }
     }
-    val dateText = remember(currentTime.dayOfYear) {
+    val dateText = remember(currentTime.toLocalDate()) {
         currentTime.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM d"))
     }
-    val timeText = remember(currentTime.minute) {
+    val timeText = remember(currentTime.hour, currentTime.minute) {
         currentTime.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
     }
 
@@ -304,11 +317,15 @@ fun UnlockScreen(nav: NavController) {
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (failCount > 0 && lockoutMs == 0L) {
+            if (failCount > 0) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "$failCount failed attempt${if (failCount > 1) "s" else ""}",
+                    if (lockoutMs > 0)
+                        "$failCount failed attempt${if (failCount > 1) "s" else ""} — locked for ${LockoutTracker.remainingLabel(ctx)}"
+                    else
+                        "$failCount failed attempt${if (failCount > 1) "s" else ""}",
                     color = Coral, style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
                 )
             }
         }

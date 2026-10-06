@@ -473,24 +473,63 @@ object VaultSession {
 
     // ── DB lifecycle ─────────────────────────────────────────────────────
 
+    /**
+     * Opens the encrypted database with [key].
+     *
+     * Crash-proofing (Android 9 fix): every failure path that can throw —
+     * native lib load, SecureData wrap, SQLCipher factory creation, Room
+     * build incl. migrations — is contained. If the DB cannot be opened,
+     * [openDb] rethrows as an [IllegalStateException] with a
+     * user-meaningful message instead of letting a raw SQLite/Room
+     * exception surface ~2s after unlock inside the first DB query.
+     *
+     * The warm-up query runs on a background thread so the first query in
+     * the UI (right after unlock, inside the vault screen's first
+     * collectAsState) never pays the migration cost — and any migration
+     * failure surfaces here, where it can be reported, instead of inside
+     * the vault dashboard.
+     */
     private fun openDb(ctx: Context, key: ByteArray) {
         // Ensure SQLCipher native libraries are loaded on Android 9
         try {
             net.sqlcipher.database.SQLiteDatabase.loadLibs(ctx.applicationContext)
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) {
+            // Not fatal yet — Room may still load them itself; log for diagnosis.
+            android.util.Log.e("VaultSession", "SQLCipher pre-load failed", e)
+        }
 
-        // Wrap the key in SecureData (writes into direct ByteBuffer via writeFrom)
-        val secureKey = SecureData(key.size)
-        secureKey.writeFrom(key)
-        VaultCrypto.wipe(key)
+        try {
+            // Wrap the key in SecureData (writes into direct ByteBuffer via writeFrom)
+            val secureKey = SecureData(key.size)
+            secureKey.writeFrom(key)
+            VaultCrypto.wipe(key)
 
-        // Pass a copy to SQLCipher (it takes ownership of its own copy)
-        val factory = SupportFactory(secureKey.copyOf(), null, false)
-        db = Room.databaseBuilder(ctx.applicationContext, VaultDatabase::class.java, "vault.db")
-            .openHelperFactory(factory)
-            .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4, VaultDatabase.MIGRATION_4_5)
-            .build()
-        vaultKey = secureKey
+            // Pass a copy to SQLCipher (it takes ownership of its own copy)
+            val factory = SupportFactory(secureKey.copyOf(), null, false)
+            db = Room.databaseBuilder(ctx.applicationContext, VaultDatabase::class.java, "vault.db")
+                .openHelperFactory(factory)
+                .addMigrations(VaultDatabase.MIGRATION_1_2, VaultDatabase.MIGRATION_2_3, VaultDatabase.MIGRATION_3_4, VaultDatabase.MIGRATION_4_5)
+                .build()
+            vaultKey = secureKey
+
+            // Warm the database off the UI thread so migration (if any) never
+            // blocks the unlock transition, and its failure is caught here.
+            Thread {
+                try {
+                    db?.query(androidx.sqlite.db.SimpleSQLiteQuery("SELECT COUNT(*) FROM entries"))
+                        ?.close()
+                } catch (e: Throwable) {
+                    android.util.Log.e("VaultSession", "DB warm-up query failed", e)
+                }
+            }.start()
+        } catch (e: Throwable) {
+            db = null
+            vaultKey?.wipe()
+            vaultKey = null
+            throw IllegalStateException(
+                "Could not open the encrypted vault: " + (e.message ?: "database error"), e
+            )
+        }
     }
 
     fun lock() {
@@ -498,6 +537,29 @@ object VaultSession {
         db = null
         vaultKey?.wipe()
         vaultKey = null
+    }
+
+    /**
+     * Permanently destroy the vault: closes and deletes the encrypted
+     * database, clears every vault metadata blob (wrapped keys, salts,
+     * recovery material), and resets the lockout counter.
+     *
+     * Used by the "wipe after 10 failed attempts" setting — the promise
+     * that a thief cannot brute-force the vault indefinitely.
+     * Idempotent: safe to call on an already-wiped or locked vault.
+     */
+    fun wipeVault(ctx: Context) {
+        lock()
+        runCatching { dbFile(ctx).delete() }
+        runCatching { dbFile(ctx).parentFile?.let { parent ->
+            // SQLCipher may leave -wal / -shm sidecar files
+            File(parent, "vault.db-wal").delete()
+            File(parent, "vault.db-shm").delete()
+        } }
+        runCatching { prefs(ctx).edit().clear().commit() }
+        cachedPrefs = null
+        runCatching { LockoutTracker.reset(ctx) }
+        pendingRecoveryKey = null
     }
 
     fun dbFile(ctx: Context): File = ctx.getDatabasePath("vault.db")

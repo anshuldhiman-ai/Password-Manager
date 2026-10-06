@@ -409,18 +409,16 @@ fun CardFace(
     val accent = product?.accent ?: brand.accent
     val light = product?.dark == false // light plastic → dark ink
     val ink = if (light) Color(0xFF17233B) else Color.White
-    val inkSoft = ink.copy(alpha = if (light) 0.55f else 0.55f)
+    val inkSoft = ink.copy(alpha = 0.55f)
     val network = CardNetwork.resolve(card)
-    // Official artwork already carries the bank logo, product name, chip and
-    // contactless glyph — so we only overlay the dynamic data on top of it.
-    val hasArt = product?.artworkRes != null
-    val artPainter = product?.artworkRes?.let { painterResource(it) }
 
-    // Always use the standard 1.586:1 ISO/IEC 7810 ID-1 aspect ratio.
-    // This guarantees every card in a list/grid renders at identical box dimensions
-    // regardless of source image orientation. Artwork is then cropped (not letterboxed)
-    // to fill this container — the bundled images should have safe-zone padding so the
-    // design's critical elements (logo, chip, contactless glyph) are never cut off.
+    // Every card renders a programmatic design — distinct gradient palettes per
+    // bank/product, decorative arcs, bank logo, EMV chip, network mark. No
+    // bundled card images: this keeps the APK small and every face identical in
+    // geometry (ISO/IEC 7810 ID-1) while still looking like a real card.
+
+    // Standard 1.586:1 ISO/IEC 7810 ID-1 aspect ratio. This guarantees every
+    // card in a list/grid renders at identical box dimensions.
     Box(
         modifier
             .fillMaxWidth()
@@ -428,18 +426,8 @@ fun CardFace(
             .clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(top, bottom))),
     ) {
-        // When an official issuer image is available, it replaces the generic palette.
-        // Use Crop so the artwork fills the entire 1.586:1 container with no letterboxing.
-        // Bundled images are pre-processed with safe-zone padding so critical elements
-        // (logo, chip) survive cropping.
-        artPainter?.let { p ->
-            Image(
-                painter = p, contentDescription = "${product?.name} official card design",
-                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-            )
-        }
         // soft decorative arcs like real card art
-        if (product?.artworkRes == null) Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize()) {
             drawCircle(
                 accent.copy(alpha = 0.13f),
                 radius = size.width * 0.55f,
@@ -453,76 +441,67 @@ fun CardFace(
         }
 
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            if (!hasArt) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    if (bankKey != null) {
-                        BankLogo(bankKey, size = 24.dp, onLight = light)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            when {
-                                bankKey != null -> CardCatalog.bankDisplay(bankKey).uppercase()
-                                else -> card.bankName.uppercase().ifBlank { "BANK" }
-                            },
-                            color = ink,
-                            fontFamily = DisplayFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            letterSpacing = 1.2.sp,
-                            maxLines = 1,
-                        )
-                        Text(
-                            when {
-                                product != null ->
-                                    product.name.uppercase() + " " + CardType.label(card.cardType).uppercase()
-                                card.label.isNotBlank() ->
-                                    CardType.label(card.cardType).uppercase() + " • " + card.label.uppercase()
-                                else -> CardType.label(card.cardType).uppercase()
-                            },
-                            color = if (product != null) accent else inkSoft,
-                            fontFamily = DisplayFamily,
-                            fontWeight = if (product != null) FontWeight.SemiBold else FontWeight.Normal,
-                            fontSize = 9.5.sp,
-                            letterSpacing = 1.sp,
-                            maxLines = 1,
-                        )
-                        if (product?.tagline?.isNotBlank() == true) {
-                            Text(
-                                product.tagline, color = inkSoft,
-                                fontFamily = DisplayFamily, fontSize = 8.sp,
-                                letterSpacing = 0.5.sp, maxLines = 1,
-                            )
-                        }
-                    }
-                    ContactlessGlyph(tint = ink.copy(alpha = 0.8f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                if (bankKey != null) {
+                    BankLogo(bankKey, size = 24.dp, onLight = light)
+                    Spacer(Modifier.width(8.dp))
                 }
-
-                Spacer(Modifier.height(8.dp))
-                EmvChip()
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        when {
+                            bankKey != null -> CardCatalog.bankDisplay(bankKey).uppercase()
+                            else -> card.bankName.uppercase().ifBlank { "BANK" }
+                        },
+                        color = ink,
+                        fontFamily = DisplayFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        letterSpacing = 1.2.sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        when {
+                            product != null ->
+                                product.name.uppercase() + " " + CardType.label(card.cardType).uppercase()
+                            card.label.isNotBlank() ->
+                                CardType.label(card.cardType).uppercase() + " • " + card.label.uppercase()
+                            else -> CardType.label(card.cardType).uppercase()
+                        },
+                        color = if (product != null) accent else inkSoft,
+                        fontFamily = DisplayFamily,
+                        fontWeight = if (product != null) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 9.5.sp,
+                        letterSpacing = 1.sp,
+                        maxLines = 1,
+                    )
+                    if (product?.tagline?.isNotBlank() == true) {
+                        Text(
+                            product.tagline, color = inkSoft,
+                            fontFamily = DisplayFamily, fontSize = 8.sp,
+                            letterSpacing = 0.5.sp, maxLines = 1,
+                        )
+                    }
+                }
+                ContactlessGlyph(tint = ink.copy(alpha = 0.8f))
             }
+
+            Spacer(Modifier.height(8.dp))
+            EmvChip()
+
             Spacer(Modifier.weight(1f))
 
-            // On official artwork the number/holder sit in a legibility scrim strip.
-            // Reduce font and remove letter-spacing on artwork cards so all 4 digit
-            // groups fit inside the scrim without truncation.
-            val overlayInk = Color.White
             val numberDisplay = if (revealNumber) groupDigits(card.number).ifBlank { "••••  ••••  ••••  ••••" }
                 else maskedNumber(card.number).ifBlank { "••••  ••••  ••••  ••••" }
             Text(
                 text = numberDisplay,
-                color = if (hasArt) overlayInk else ink,
-                fontSize = if (hasArt) 15.sp else 17.sp,
+                color = ink,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = FontFamily.Monospace,
-                letterSpacing = if (hasArt) 0.sp else 0.5.sp,
+                letterSpacing = 0.5.sp,
                 maxLines = 1,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = if (hasArt)
-                    Modifier.clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.30f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                else Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
 
@@ -531,9 +510,9 @@ fun CardFace(
                     Row {
                         if (card.expiry.isNotBlank()) {
                             Column {
-                                Text("VALID THRU", color = if (hasArt) overlayInk.copy(alpha = 0.7f) else inkSoft,
+                                Text("VALID THRU", color = inkSoft,
                                     fontFamily = DisplayFamily, fontSize = 7.sp, letterSpacing = 1.sp)
-                                Text(card.expiry, color = if (hasArt) overlayInk else ink, fontSize = 12.sp,
+                                Text(card.expiry, color = ink, fontSize = 12.sp,
                                     fontFamily = FontFamily.Monospace)
                             }
                         }
@@ -541,7 +520,7 @@ fun CardFace(
                     Spacer(Modifier.height(3.dp))
                     Text(
                         card.holder.uppercase().ifBlank { " " },
-                        color = if (hasArt) overlayInk.copy(alpha = 0.95f) else ink.copy(alpha = 0.92f),
+                        color = ink.copy(alpha = 0.92f),
                         fontFamily = DisplayFamily,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -549,10 +528,7 @@ fun CardFace(
                         maxLines = 1,
                     )
                 }
-                // Network mark is baked into official artwork, so only draw it on generic faces
-                if (!hasArt) {
-                    NetworkMark(network, onLight = light)
-                }
+                NetworkMark(network, onLight = light)
             }
         }
     }

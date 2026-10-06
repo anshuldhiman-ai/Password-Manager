@@ -1,4 +1,4 @@
-﻿package com.family.pswdmngr.data
+package com.family.pswdmngr.data
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
@@ -392,6 +392,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE starred = 1 AND completed = 0 ORDER BY dueAt ASC")
     fun observeStarred(): Flow<List<TaskItem>>
+
+    @Query("SELECT * FROM tasks ORDER BY position ASC, id DESC")
+    fun observeAll(): Flow<List<TaskItem>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertList(list: TaskList): Long
